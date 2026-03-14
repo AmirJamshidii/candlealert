@@ -6,20 +6,17 @@ import { PolymarketWinnerRepository } from './polymarket-winner.repository';
 import { IWinner } from '../telegram/telegram-message.factory';
 import { ErrorLogService } from '../error-log/error-log.service';
 
-interface PolymarketMarket {
-  id: string;
-  question: string;
-  active: boolean;
-  closed: boolean;
-  tokens: Array<{ token_id: string; outcome: string }>;
-  outcomePrices: string[];
+interface PolymarketHolder {
+  proxyWallet: string;
+  name: string;
+  pseudonym: string;
+  amount: number;
+  outcomeIndex: number;
 }
 
-interface PolymarketTrade {
-  maker_address: string;
-  size: string;
-  side: string;
-  outcome_index: number;
+interface PolymarketTokenGroup {
+  token: string;
+  holders: PolymarketHolder[];
 }
 
 @Injectable()
@@ -36,120 +33,98 @@ export class PolymarketService {
   async handleSignal(
     signalKey: string,
     interval: string,
-    closePrice: number,
+    openTime: number,
     closeTime: number,
   ): Promise<IWinner[]> {
     try {
-      const market = await this.findBtcMarket(closePrice);
-      if (!market) {
-        this.logger.warn('No matching BTC Polymarket market found');
+      const { conditionId, question } = await this.findMarket(interval, openTime);
+      if (!conditionId) {
+        this.logger.warn(`No Polymarket market found for btc-updown-${interval}-${Math.floor(openTime / 1000)}`);
         return [];
       }
 
-      // Red candle = price dropped = "No / lower" outcome wins (index 1 or "No" side)
-      const winningOutcome = this.determineWinningOutcome(market);
-      const winners = await this.getTopWinners(market, winningOutcome, signalKey, interval, closeTime);
-      return winners;
+      return await this.getTopDownHolders(conditionId, question, signalKey, interval, closeTime);
     } catch (err) {
       this.errorLogService.log(err, { module: 'polymarket' });
       return [];
     }
   }
 
-  private async findBtcMarket(closePrice: number): Promise<PolymarketMarket | null> {
+  private async findMarket(interval: string, openTime: number): Promise<{ conditionId: string; question: string }> {
+    const slug = `btc-updown-${interval}-${Math.floor(openTime / 1000)}`;
+    this.logger.log(`Fetching Polymarket market: ${slug}`);
+
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`${this.appConfig.polymarketGammaUrl}/markets`, {
-          params: { closed: false, active: true, tag: 'crypto', limit: 100 },
+        this.httpService.get(`${this.appConfig.polymarketGammaUrl}/events`, {
+          params: { slug },
           timeout: 10_000,
         }),
       );
 
-      const markets: PolymarketMarket[] = res.data?.data ?? res.data ?? [];
+      const events: Array<{ markets?: Array<{ conditionId: string; question: string }> }> =
+        Array.isArray(res.data) ? res.data : [res.data];
 
-      // Find BTC price range markets — filter by question text containing BTC and price
-      const btcMarkets = markets.filter(
-        (m) =>
-          !m.closed &&
-          m.active &&
-          (m.question.toUpperCase().includes('BTC') || m.question.toUpperCase().includes('BITCOIN')),
-      );
+      const market = events[0]?.markets?.[0];
+      if (!market?.conditionId) return { conditionId: '', question: '' };
 
-      if (!btcMarkets.length) return null;
-
-      // Prefer market whose question contains a price range around closePrice
-      const priceStr = Math.round(closePrice / 1000) * 1000; // round to nearest 1k
-      const match = btcMarkets.find((m) => m.question.includes(String(priceStr)));
-      return match ?? btcMarkets[0];
+      this.logger.log(`conditionId: ${market.conditionId}`);
+      return { conditionId: market.conditionId, question: market.question ?? slug };
     } catch (err) {
-      this.logger.error('Failed to fetch Polymarket markets', err);
-      return null;
+      this.logger.error('Failed to fetch Polymarket event', err);
+      return { conditionId: '', question: '' };
     }
   }
 
-  private determineWinningOutcome(market: PolymarketMarket): { tokenId: string; outcome: string } {
-    // Red candle = price went down = "No" or "lower" outcome wins
-    // Polymarket YES/NO: index 0 = Yes, index 1 = No
-    const noToken = market.tokens?.find((t) => t.outcome.toUpperCase() === 'NO') ?? market.tokens?.[1];
-    return {
-      tokenId: noToken?.token_id ?? '',
-      outcome: noToken?.outcome ?? 'No',
-    };
-  }
-
-  private async getTopWinners(
-    market: PolymarketMarket,
-    winningOutcome: { tokenId: string; outcome: string },
+  private async getTopDownHolders(
+    conditionId: string,
+    marketQuestion: string,
     signalKey: string,
     interval: string,
     closeTime: number,
   ): Promise<IWinner[]> {
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`${this.appConfig.polymarketBaseUrl}/trades`, {
-          params: { market: market.id, limit: 500 },
-          timeout: 10_000,
+        this.httpService.get(`${this.appConfig.polymarketDataUrl}/holders`, {
+          params: { market: conditionId, limit: 500 },
+          timeout: 15_000,
         }),
       );
 
-      const trades: PolymarketTrade[] = res.data?.data ?? res.data ?? [];
+      const groups: PolymarketTokenGroup[] = Array.isArray(res.data) ? res.data : [];
 
-      // Aggregate by address on the winning side
-      const aggregated = new Map<string, number>();
-      for (const trade of trades) {
-        // Filter to winning outcome (No = side "sell" in CLOB, or by outcome_index)
-        if (trade.side?.toUpperCase() !== 'BUY') continue;
-        const current = aggregated.get(trade.maker_address) ?? 0;
-        aggregated.set(trade.maker_address, current + parseFloat(trade.size ?? '0'));
+      // Find the Down token group (outcomeIndex === 1)
+      const downGroup = groups.find((g) => g.holders?.[0]?.outcomeIndex === 1);
+      if (!downGroup?.holders?.length) {
+        this.logger.warn(`No Down holders found for market ${conditionId}`);
+        return [];
       }
 
-      const sorted = [...aggregated.entries()]
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, this.appConfig.polymarketWinnerCount);
+      const top = downGroup.holders.slice(0, this.appConfig.polymarketWinnerCount);
+      this.logger.log(`Top Down holders fetched: ${top.length}`);
 
       // Store in DB
-      const entities = sorted.map(([addr, size]) => ({
-        signalKey,
-        marketId: market.id,
-        marketQuestion: market.question,
-        walletAddress: addr,
-        positionSize: String(size),
-        outcomeSide: winningOutcome.outcome,
-        candleInterval: interval,
-        candleCloseTime: String(closeTime),
-      }));
+      await this.winnerRepo.saveAll(
+        top.map((h) => ({
+          signalKey,
+          marketId: conditionId,
+          marketQuestion,
+          walletAddress: h.proxyWallet,
+          positionSize: String(h.amount),
+          outcomeSide: 'Down',
+          candleInterval: interval,
+          candleCloseTime: String(closeTime),
+        })),
+      );
 
-      if (entities.length > 0) {
-        await this.winnerRepo.saveAll(entities);
-      }
-
-      return sorted.map(([addr, size]) => ({
-        walletAddress: addr,
-        positionSize: size,
-        marketQuestion: market.question,
+      return top.map((h) => ({
+        walletAddress: h.proxyWallet,
+        positionSize: h.amount,
+        marketQuestion,
+        name: h.name || h.pseudonym || undefined,
       }));
     } catch (err) {
-      this.logger.error('Failed to fetch Polymarket trades', err);
+      this.logger.error('Failed to fetch Polymarket holders', err);
       return [];
     }
   }

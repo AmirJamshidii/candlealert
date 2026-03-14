@@ -20,9 +20,12 @@ export const configValidationSchema = Joi.object({
   TELEGRAM_CHAT_ID: Joi.string().required(),
 
   // Polymarket
-  POLYMARKET_BASE_URL: Joi.string().default('https://clob.polymarket.com'),
   POLYMARKET_GAMMA_URL: Joi.string().default('https://gamma-api.polymarket.com'),
+  POLYMARKET_DATA_URL: Joi.string().default('https://data-api.polymarket.com'),
   POLYMARKET_WINNER_COUNT: Joi.number().integer().min(1).max(50).default(10),
+
+  // Testing
+  SIGNAL_TEST_MODE: Joi.boolean().default(false),
 
   // App
   PORT: Joi.number().default(3000),
