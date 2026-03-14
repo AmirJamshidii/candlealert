@@ -36,7 +36,10 @@ async function main(): Promise<void> {
   const scheduler = new SchedulerRunner(config, binance, candleRepo, signalDetector, telegram);
   scheduler.start();
 
-  const healthServer = startHealthServer(config.healthPort);
+  const healthServer = startHealthServer(config.healthPort, {
+    symbols: config.symbols,
+    intervals: config.intervals,
+  });
 
   await ensureSymbols(config.symbols, config.intervals);
 

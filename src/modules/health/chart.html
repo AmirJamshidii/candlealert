@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Candle Alert</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f0f; color: #e0e0e0; }
+    .toolbar { display: flex; gap: 10px; padding: 12px 16px; background: #1a1a1a; border-bottom: 1px solid #2a2a2a; align-items: center; flex-wrap: wrap; }
+    .toolbar select, .toolbar button { background: #2a2a2a; color: #e0e0e0; border: 1px solid #3a3a3a; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .toolbar select:hover, .toolbar button:hover { border-color: #5a5a5a; }
+    .toolbar button.active { background: #2962ff; border-color: #2962ff; color: #fff; }
+    .toolbar .spacer { flex: 1; }
+    .toolbar .title { font-weight: 600; font-size: 15px; color: #fff; }
+    #chart { width: 100%; height: calc(100vh - 50px); }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff9800; display: inline-block; margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="title">Candle Alert</span>
+    <div class="spacer"></div>
+    <select id="symbol"></select>
+    <select id="interval"></select>
+    <select id="limit">
+      <option value="50">50</option>
+      <option value="100" selected>100</option>
+      <option value="200">200</option>
+      <option value="500">500</option>
+    </select>
+    <button id="toggleAlerts" class="active">Alerts</button>
+  </div>
+  <div id="chart"></div>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script>
+    const chartEl = document.getElementById('chart');
+    const symbolSel = document.getElementById('symbol');
+    const intervalSel = document.getElementById('interval');
+    const limitSel = document.getElementById('limit');
+    const alertBtn = document.getElementById('toggleAlerts');
+
+    let showAlerts = true;
+    let chart, candleSeries, markers = [];
+
+    function createChart() {
+      if (chart) chart.remove();
+      chart = LightweightCharts.createChart(chartEl, {
+        layout: { background: { color: '#0f0f0f' }, textColor: '#999' },
+        grid: { vertLines: { color: '#1a1a1a' }, horzLines: { color: '#1a1a1a' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#2a2a2a' },
+        timeScale: { borderColor: '#2a2a2a', timeVisible: true, secondsVisible: false },
+      });
+      candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a', downColor: '#ef5350',
+        borderUpColor: '#26a69a', borderDownColor: '#ef5350',
+        wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+      });
+    }
+
+    async function fetchConfig() {
+      const res = await fetch('/api/config');
+      const cfg = await res.json();
+      symbolSel.innerHTML = cfg.symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+      intervalSel.innerHTML = cfg.intervals.map(i => `<option value="${i}">${i}</option>`).join('');
+    }
+
+    async function loadData() {
+      const symbol = symbolSel.value;
+      const interval = intervalSel.value;
+      const limit = limitSel.value;
+      if (!symbol || !interval) return;
+
+      const [candleRes, alertRes] = await Promise.all([
+        fetch(`/api/candles?symbol=${symbol}&interval=${interval}&limit=${limit}`),
+        fetch(`/api/alerts?symbol=${symbol}&interval=${interval}`),
+      ]);
+      const candles = await candleRes.json();
+      const alerts = await alertRes.json();
+
+      const data = candles.map(c => ({
+        time: Math.floor(c.openTime / 1000),
+        open: c.open, high: c.high, low: c.low, close: c.close,
+      }));
+
+      candleSeries.setData(data);
+
+      if (showAlerts && alerts.length > 0) {
+        const alertTimes = new Set(alerts.map(a => Math.floor(a.lastCandleCloseTime / 1000)));
+        markers = data
+          .filter(d => {
+            for (const t of alertTimes) {
+              if (Math.abs(d.time - t) < 120) return true;
+            }
+            return false;
+          })
+          .map(d => ({
+            time: d.time,
+            position: 'aboveBar',
+            color: '#ff9800',
+            shape: 'arrowDown',
+            text: 'Alert',
+          }));
+        candleSeries.setMarkers(markers);
+      } else {
+        candleSeries.setMarkers([]);
+      }
+
+      chart.timeScale().fitContent();
+    }
+
+    alertBtn.addEventListener('click', () => {
+      showAlerts = !showAlerts;
+      alertBtn.classList.toggle('active', showAlerts);
+      loadData();
+    });
+
+    symbolSel.addEventListener('change', loadData);
+    intervalSel.addEventListener('change', loadData);
+    limitSel.addEventListener('change', loadData);
+
+    window.addEventListener('resize', () => {
+      if (chart) chart.applyOptions({ width: chartEl.clientWidth, height: chartEl.clientHeight });
+    });
+
+    (async () => {
+      try {
+        createChart();
+        await fetchConfig();
+        await loadData();
+      } catch (err) {
+        console.error('Chart init error:', err);
+      }
+    })();
+  </script>
+</body>
+</html>
