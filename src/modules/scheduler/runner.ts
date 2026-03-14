@@ -90,7 +90,7 @@ export class SchedulerRunner {
     const message = this.telegram.formatSignalAlert({
       symbol,
       interval,
-      pattern: '4 consecutive green candles',
+      pattern: '4 consecutive red candles',
       closePrice: lastCandle.close,
       closeTime: lastCandle.closeTime,
     });

@@ -58,7 +58,7 @@ export class TelegramService {
   }): string {
     const time = new Date(data.closeTime).toISOString();
     return [
-      '🟢 *Signal Alert*',
+      '🔴 *Signal Alert*',
       '',
       `*Symbol:* ${data.symbol}`,
       `*Interval:* ${data.interval}`,

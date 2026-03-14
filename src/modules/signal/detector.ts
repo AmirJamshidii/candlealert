@@ -3,23 +3,19 @@ import { Candle, Alert, SignalResult } from '../../types';
 import { logger } from '../../lib/logger';
 
 const MODULE = 'signal';
-const SIGNAL_TYPE = '4_green_candles';
-const REQUIRED_GREEN_COUNT = 4;
+const SIGNAL_TYPE = '4_red_candles';
+const REQUIRED_RED_COUNT = 4;
 
 export class SignalDetector {
-  /**
-   * Checks if the last N closed candles are all green (close > open).
-   * Returns a signal result with a unique key derived from the close times.
-   */
   detect(candles: Candle[]): SignalResult {
-    if (candles.length < REQUIRED_GREEN_COUNT) {
+    if (candles.length < REQUIRED_RED_COUNT) {
       return { detected: false, signalKey: '', candles: [] };
     }
 
-    const lastN = candles.slice(0, REQUIRED_GREEN_COUNT);
-    const allGreen = lastN.every(c => c.close > c.open);
+    const lastN = candles.slice(0, REQUIRED_RED_COUNT);
+    const allRed = lastN.every(c => c.close < c.open);
 
-    if (!allGreen) {
+    if (!allRed) {
       return { detected: false, signalKey: '', candles: [] };
     }
 
