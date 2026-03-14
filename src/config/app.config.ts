@@ -23,9 +23,11 @@ export class AppConfig {
     return this.configService.get<string>('TELEGRAM_CHAT_ID').split(',').map(s => s.trim());
   }
 
-  get polymarketBaseUrl(): string { return this.configService.get<string>('POLYMARKET_BASE_URL'); }
   get polymarketGammaUrl(): string { return this.configService.get<string>('POLYMARKET_GAMMA_URL'); }
+  get polymarketDataUrl(): string { return this.configService.get<string>('POLYMARKET_DATA_URL'); }
   get polymarketWinnerCount(): number { return this.configService.get<number>('POLYMARKET_WINNER_COUNT'); }
+
+  get signalTestMode(): boolean { return this.configService.get<boolean>('SIGNAL_TEST_MODE'); }
 
   get port(): number { return this.configService.get<number>('PORT'); }
   get nodeEnv(): string { return this.configService.get<string>('NODE_ENV'); }

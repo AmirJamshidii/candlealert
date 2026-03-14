@@ -29,7 +29,7 @@ export class AlertService {
       const winners = await this.polymarketService.handleSignal(
         signalKey,
         interval,
-        candle.close,
+        candle.openTime,
         candle.closeTime,
       );
 

@@ -4,6 +4,7 @@ export interface IWinner {
   walletAddress: string;
   positionSize: number;
   marketQuestion: string;
+  name?: string;
 }
 
 function formatPrice(n: number): string {
@@ -31,16 +32,19 @@ export function formatReversalAlert(
   interval: string,
   winners: IWinner[],
 ): string {
+  const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
+  const eventLink = `https://polymarket.com/event/${eventSlug}`;
+
   const winnerLines = winners.length
     ? winners
         .map((w, i) => {
-          const addr = abbreviateAddress(w.walletAddress);
+          const display = w.name ? `${w.name} (${abbreviateAddress(w.walletAddress)})` : abbreviateAddress(w.walletAddress);
+          const shares = Math.round(w.positionSize).toLocaleString('en-US');
           const link = `https://polymarket.com/profile/${w.walletAddress}`;
-          const amount = formatPrice(w.positionSize);
-          return `${i + 1}. ${addr} — ${amount}\n   ${link}`;
+          return `${i + 1}. ${display} — ${shares} shares\n   ${link}`;
         })
         .join('\n')
-    : 'No winners data available';
+    : 'No holders data available';
 
   const marketQuestion = winners[0]?.marketQuestion ?? 'BTC price market';
 
@@ -51,7 +55,9 @@ export function formatReversalAlert(
     '',
     'Was GREEN at T-10s → Closed RED',
     '',
-    `📊 Top ${winners.length} Polymarket Winners (${marketQuestion})`,
+    `📊 Top ${winners.length} Polymarket Down Holders (${marketQuestion})`,
+    `🔗 ${eventLink}`,
+    '',
     winnerLines,
   ].join('\n');
 }

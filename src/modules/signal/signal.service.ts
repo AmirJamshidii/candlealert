@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { KlineTickEvent } from '../../events/kline-tick.event';
 import { ReversalSignalEvent } from '../../events/reversal-signal.event';
 import { SignalStateService } from './signal-state.service';
+import { AppConfig } from '../../config/app.config';
 
 const REVERSAL_WINDOW_MS = 10_000; // 10 seconds before close
 
@@ -14,6 +15,7 @@ export class SignalService {
   constructor(
     private readonly signalStateService: SignalStateService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly appConfig: AppConfig,
   ) {}
 
   @OnEvent('kline.tick')
@@ -40,10 +42,15 @@ export class SignalService {
       const snapshot = this.signalStateService.get(interval, candle.openTime);
       const isCandleRed = candle.close < candle.open;
 
-      if (snapshot?.wasGreen && isCandleRed) {
+      const isReversal = snapshot?.wasGreen && isCandleRed;
+      const isTestMode = this.appConfig.signalTestMode;
+
+      if (isReversal || isTestMode) {
         const signalKey = `reversal:BTCUSDT:${interval}:${candle.closeTime}`;
         this.logger.log(
-          `[${interval}] REVERSAL detected! Was green at ${snapshot.closeAtSnapshot}, closed red at ${candle.close}. Key: ${signalKey}`,
+          isTestMode && !isReversal
+            ? `[${interval}] TEST MODE: forcing signal. Key: ${signalKey}`
+            : `[${interval}] REVERSAL detected! Was green at ${snapshot.closeAtSnapshot}, closed red at ${candle.close}. Key: ${signalKey}`,
         );
         this.eventEmitter.emit('reversal.detected', new ReversalSignalEvent(signalKey, interval, candle));
       }
