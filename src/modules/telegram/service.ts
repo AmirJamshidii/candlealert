@@ -8,13 +8,12 @@ export class TelegramService {
 
   constructor(
     private botToken: string,
-    private defaultChatId: string
+    private chatIds: string[]
   ) {
     this.apiUrl = `https://api.telegram.org/bot${this.botToken}`;
   }
 
-  async sendMessage(text: string, chatId?: string): Promise<void> {
-    const targetChat = chatId || this.defaultChatId;
+  async sendMessage(text: string, chatId: string): Promise<void> {
     const url = `${this.apiUrl}/sendMessage`;
 
     await retry(
@@ -23,7 +22,7 @@ export class TelegramService {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            chat_id: targetChat,
+            chat_id: chatId,
             text,
             parse_mode: 'Markdown',
           }),
@@ -37,7 +36,17 @@ export class TelegramService {
       { attempts: 2, delayMs: 1000, module: MODULE }
     );
 
-    logger.info('Telegram message sent', { module: MODULE });
+    logger.info(`Telegram message sent to ${chatId}`, { module: MODULE });
+  }
+
+  async sendMessageToAll(text: string): Promise<void> {
+    for (const chatId of this.chatIds) {
+      await this.sendMessage(text, chatId);
+    }
+  }
+
+  getChatIds(): string[] {
+    return this.chatIds;
   }
 
   formatSignalAlert(data: {
@@ -61,7 +70,7 @@ export class TelegramService {
 
   createErrorSender(): (message: string) => Promise<void> {
     return async (message: string) => {
-      await this.sendMessage(message);
+      await this.sendMessageToAll(message);
     };
   }
 }

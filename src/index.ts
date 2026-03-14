@@ -17,14 +17,15 @@ async function main(): Promise<void> {
 
   const config = loadConfig();
   logger.info(`Symbols: ${config.symbols.join(', ')}`, { module: MODULE });
-  logger.info(`Interval: ${config.interval}`, { module: MODULE });
+  logger.info(`Intervals: ${config.intervals.join(', ')}`, { module: MODULE });
+  logger.info(`Chat IDs: ${config.telegramChatIds.join(', ')}`, { module: MODULE });
 
   setupGlobalHandlers();
 
   initDb(config.databaseUrl);
   logger.info('Database pool initialized', { module: MODULE });
 
-  const telegram = new TelegramService(config.telegramBotToken, config.telegramChatId);
+  const telegram = new TelegramService(config.telegramBotToken, config.telegramChatIds);
   registerTelegramErrorSender(telegram.createErrorSender());
   logger.info('Telegram service initialized', { module: MODULE });
 
@@ -37,10 +38,12 @@ async function main(): Promise<void> {
 
   const healthServer = startHealthServer(config.healthPort);
 
-  await ensureSymbols(config.symbols, config.interval);
+  await ensureSymbols(config.symbols, config.intervals);
 
   try {
-    await telegram.sendMessage(`✅ *Amir Bot started*\n\nSymbols: ${config.symbols.join(', ')}\nInterval: ${config.interval}`);
+    await telegram.sendMessageToAll(
+      `✅ *Amir Bot started*\n\nSymbols: ${config.symbols.join(', ')}\nIntervals: ${config.intervals.join(', ')}\nChat IDs: ${config.telegramChatIds.length}`
+    );
   } catch (err) {
     logger.warn('Could not send startup message to Telegram', { module: MODULE, data: err instanceof Error ? err.message : String(err) });
   }
@@ -50,17 +53,19 @@ async function main(): Promise<void> {
   setupGracefulShutdown(scheduler, healthServer);
 }
 
-async function ensureSymbols(symbols: string[], interval: string): Promise<void> {
+async function ensureSymbols(symbols: string[], intervals: string[]): Promise<void> {
   const { query } = await import('./lib/db');
   for (const symbol of symbols) {
-    try {
-      await query(
-        `INSERT INTO symbols (symbol, interval, is_active) VALUES ($1, $2, TRUE)
-         ON CONFLICT (symbol, interval) DO UPDATE SET is_active = TRUE`,
-        [symbol, interval]
-      );
-    } catch (err) {
-      await handleError(err, { module: MODULE, symbol });
+    for (const interval of intervals) {
+      try {
+        await query(
+          `INSERT INTO symbols (symbol, interval, is_active) VALUES ($1, $2, TRUE)
+           ON CONFLICT (symbol, interval) DO UPDATE SET is_active = TRUE`,
+          [symbol, interval]
+        );
+      } catch (err) {
+        await handleError(err, { module: MODULE, symbol });
+      }
     }
   }
   logger.info('Symbols synced to database', { module: MODULE });

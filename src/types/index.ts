@@ -2,9 +2,9 @@ export interface AppConfig {
   databaseUrl: string;
   binanceBaseUrl: string;
   telegramBotToken: string;
-  telegramChatId: string;
+  telegramChatIds: string[];
   symbols: string[];
-  interval: string;
+  intervals: string[];
   pollCron: string;
   healthPort: number;
 }

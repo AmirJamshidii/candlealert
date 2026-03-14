@@ -42,10 +42,12 @@ export class SchedulerRunner {
     logger.info('Starting poll cycle', { module: MODULE });
 
     for (const symbol of this.config.symbols) {
-      try {
-        await this.processSymbol(symbol);
-      } catch (err) {
-        await handleError(err, { module: MODULE, symbol });
+      for (const interval of this.config.intervals) {
+        try {
+          await this.processSymbolInterval(symbol, interval);
+        } catch (err) {
+          await handleError(err, { module: MODULE, symbol });
+        }
       }
     }
 
@@ -53,15 +55,15 @@ export class SchedulerRunner {
     logger.info(`Poll cycle completed in ${elapsed}ms`, { module: MODULE });
   }
 
-  private async processSymbol(symbol: string): Promise<void> {
-    logger.debug(`Processing ${symbol}`, { module: MODULE, symbol });
+  private async processSymbolInterval(symbol: string, interval: string): Promise<void> {
+    logger.debug(`Processing ${symbol} [${interval}]`, { module: MODULE, symbol });
 
-    const candles = await this.binance.fetchCandles(symbol, this.config.interval, 10);
+    const candles = await this.binance.fetchCandles(symbol, interval, 10);
 
     const latestCandle = candles[candles.length - 1];
     if (latestCandle) {
       logger.info(
-        `${symbol} price: ${latestCandle.close} (H: ${latestCandle.high} L: ${latestCandle.low} V: ${latestCandle.volume})`,
+        `${symbol} [${interval}] price: ${latestCandle.close} (H: ${latestCandle.high} L: ${latestCandle.low} V: ${latestCandle.volume})`,
         { module: MODULE, symbol }
       );
     }
@@ -69,56 +71,58 @@ export class SchedulerRunner {
     const closedCandles = this.binance.getClosedCandles(candles);
 
     if (closedCandles.length === 0) {
-      logger.warn(`No closed candles for ${symbol}`, { module: MODULE, symbol });
+      logger.warn(`No closed candles for ${symbol} [${interval}]`, { module: MODULE, symbol });
       return;
     }
 
     await this.candleRepo.upsertCandles(closedCandles);
 
-    const storedCandles = await this.candleRepo.getLastClosedCandles(symbol, this.config.interval, 4);
+    const storedCandles = await this.candleRepo.getLastClosedCandles(symbol, interval, 4);
 
     const signal = this.signalDetector.detect(storedCandles);
 
     if (!signal.detected) {
-      logger.debug(`No signal for ${symbol}`, { module: MODULE, symbol });
-      return;
-    }
-
-    const alreadySent = await this.signalDetector.isAlertAlreadySent(
-      signal.signalKey,
-      this.config.telegramChatId
-    );
-
-    if (alreadySent) {
-      logger.debug(`Alert already sent for ${symbol}: ${signal.signalKey}`, { module: MODULE, symbol });
+      logger.debug(`No signal for ${symbol} [${interval}]`, { module: MODULE, symbol });
       return;
     }
 
     const lastCandle = signal.candles[0];
     const message = this.telegram.formatSignalAlert({
       symbol,
-      interval: this.config.interval,
+      interval,
       pattern: '4 consecutive green candles',
       closePrice: lastCandle.close,
       closeTime: lastCandle.closeTime,
     });
 
-    try {
-      await this.telegram.sendMessage(message);
-    } catch (err) {
-      await handleError(err, { module: 'telegram', symbol });
-      return;
+    for (const chatId of this.config.telegramChatIds) {
+      const alreadySent = await this.signalDetector.isAlertAlreadySent(
+        signal.signalKey,
+        chatId
+      );
+
+      if (alreadySent) {
+        logger.debug(`Alert already sent for ${symbol} [${interval}] to ${chatId}`, { module: MODULE, symbol });
+        continue;
+      }
+
+      try {
+        await this.telegram.sendMessage(message, chatId);
+      } catch (err) {
+        await handleError(err, { module: 'telegram', symbol });
+        continue;
+      }
+
+      await this.signalDetector.recordAlert({
+        symbol,
+        interval,
+        signalType: this.signalDetector.getSignalType(),
+        signalKey: signal.signalKey,
+        lastCandleCloseTime: lastCandle.closeTime,
+        telegramChatId: chatId,
+      });
+
+      logger.info(`Signal alert sent for ${symbol} [${interval}] to ${chatId}`, { module: MODULE, symbol });
     }
-
-    await this.signalDetector.recordAlert({
-      symbol,
-      interval: this.config.interval,
-      signalType: this.signalDetector.getSignalType(),
-      signalKey: signal.signalKey,
-      lastCandleCloseTime: lastCandle.closeTime,
-      telegramChatId: this.config.telegramChatId,
-    });
-
-    logger.info(`Signal alert sent for ${symbol}`, { module: MODULE, symbol });
   }
 }
