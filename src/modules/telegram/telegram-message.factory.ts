@@ -1,4 +1,5 @@
 import { ICandle } from '../../common/interfaces/candle.interface';
+import { ReversalDirection } from '../../events/reversal-signal.event';
 
 export interface IWinner {
   walletAddress: string;
@@ -24,14 +25,15 @@ function abbreviateAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-function formatCandle(candle: ICandle): string {
+function formatCandle(candle: ICandle, direction: ReversalDirection): string {
   const date = new Date(candle.closeTime).toUTCString().replace(' GMT', ' UTC');
+  const arrow = direction === 'green_to_red' ? '↓' : '↑';
   return [
     `Candle close: ${date}`,
     `Open:  ${formatPrice(candle.open)}`,
     `High:  ${formatPrice(candle.high)}`,
     `Low:   ${formatPrice(candle.low)}`,
-    `Close: ${formatPrice(candle.close)} ↓`,
+    `Close: ${formatPrice(candle.close)} ${arrow}`,
   ].join('\n');
 }
 
@@ -42,10 +44,12 @@ export function formatReversalAlert(
   snapshotPrice: number | null,
   snapshotWindowMs: number = 10000,
   positions: IPosition[] = [],
+  direction: ReversalDirection = 'green_to_red',
 ): string {
   const snapshotWindowS = snapshotWindowMs / 1000;
   const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
   const eventLink = `https://polymarket.com/event/${eventSlug}`;
+  const isGreenToRed = direction === 'green_to_red';
 
   const winnerLines = winners.length
     ? winners
@@ -59,6 +63,15 @@ export function formatReversalAlert(
     : 'No holders data available';
 
   const marketQuestion = winners[0]?.marketQuestion ?? 'BTC price market';
+  const side = isGreenToRed ? 'Down' : 'Up';
+
+  const snapshotLine = isGreenToRed
+    ? snapshotPrice != null
+      ? `Was GREEN at T-${snapshotWindowS}s → ${formatPrice(snapshotPrice)} → Closed RED`
+      : `Was GREEN at T-${snapshotWindowS}s → Closed RED`
+    : snapshotPrice != null
+      ? `Was RED at T-${snapshotWindowS}s → ${formatPrice(snapshotPrice)} → Closed GREEN`
+      : `Was RED at T-${snapshotWindowS}s → Closed GREEN`;
 
   const positionLines = positions
     .map((p, i) => {
@@ -69,20 +82,18 @@ export function formatReversalAlert(
     .join('\n');
 
   return [
-    `🔴 BTC Reversal Signal [${interval}]`,
+    `${isGreenToRed ? '🔴' : '🟢'} BTC Reversal Signal [${interval}]`,
     '',
-    formatCandle(candle),
+    formatCandle(candle, direction),
     '',
-    snapshotPrice != null
-      ? `Was GREEN at T-${snapshotWindowS}s → ${formatPrice(snapshotPrice)} → Closed RED`
-      : `Was GREEN at T-${snapshotWindowS}s → Closed RED`,
+    snapshotLine,
     '',
-    `📊 Top ${winners.length} Polymarket Down Holders (${marketQuestion})`,
+    `📊 Top ${winners.length} Polymarket ${side} Holders (${marketQuestion})`,
     `🔗 ${eventLink}`,
     '',
     winnerLines,
     ...(positions.length
-      ? ['', `💰 Top ${positions.length} Polymarket Down Positions by PNL`, '', positionLines]
+      ? ['', `💰 Top ${positions.length} Polymarket ${side} Positions by PNL`, '', positionLines]
       : []),
   ].join('\n');
 }

@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { AppConfig } from '../../config/app.config';
 import { PolymarketWinnerRepository } from './polymarket-winner.repository';
 import { IWinner, IPosition } from '../telegram/telegram-message.factory';
+import { ReversalDirection } from '../../events/reversal-signal.event';
 import { ErrorLogService } from '../error-log/error-log.service';
 
 interface PolymarketHolder {
@@ -48,6 +49,7 @@ export class PolymarketService {
     interval: string,
     openTime: number,
     closeTime: number,
+    direction: ReversalDirection = 'green_to_red',
   ): Promise<{ holders: IWinner[]; positions: IPosition[] }> {
     try {
       const { conditionId, question } = await this.findMarket(interval, openTime);
@@ -56,9 +58,13 @@ export class PolymarketService {
         return { holders: [], positions: [] };
       }
 
+      // outcomeIndex: 1 = Down (green→red), 0 = Up (red→green)
+      const outcomeIndex = direction === 'green_to_red' ? 1 : 0;
+      const outcomeSide = direction === 'green_to_red' ? 'Down' : 'Up';
+
       const [holders, positions] = await Promise.all([
-        this.getTopDownHolders(conditionId, question, signalKey, interval, closeTime),
-        this.getTopPositionsByPnl(conditionId, question),
+        this.getTopHolders(conditionId, question, signalKey, interval, closeTime, outcomeIndex, outcomeSide),
+        this.getTopPositionsByPnl(conditionId, question, outcomeIndex),
       ]);
       return { holders, positions };
     } catch (err) {
@@ -93,12 +99,14 @@ export class PolymarketService {
     }
   }
 
-  private async getTopDownHolders(
+  private async getTopHolders(
     conditionId: string,
     marketQuestion: string,
     signalKey: string,
     interval: string,
     closeTime: number,
+    outcomeIndex: number,
+    outcomeSide: string,
   ): Promise<IWinner[]> {
     try {
       const res = await firstValueFrom(
@@ -110,15 +118,14 @@ export class PolymarketService {
 
       const groups: PolymarketTokenGroup[] = Array.isArray(res.data) ? res.data : [];
 
-      // Find the Down token group (outcomeIndex === 1)
-      const downGroup = groups.find((g) => g.holders?.[0]?.outcomeIndex === 1);
-      if (!downGroup?.holders?.length) {
-        this.logger.warn(`No Down holders found for market ${conditionId}`);
+      const group = groups.find((g) => g.holders?.[0]?.outcomeIndex === outcomeIndex);
+      if (!group?.holders?.length) {
+        this.logger.warn(`No ${outcomeSide} holders found for market ${conditionId}`);
         return [];
       }
 
-      const top = downGroup.holders.slice(0, this.appConfig.polymarketWinnerCount);
-      this.logger.log(`Top Down holders fetched: ${top.length}`);
+      const top = group.holders.slice(0, this.appConfig.polymarketWinnerCount);
+      this.logger.log(`Top ${outcomeSide} holders fetched: ${top.length}`);
 
       // Store in DB
       await this.winnerRepo.saveAll(
@@ -128,7 +135,7 @@ export class PolymarketService {
           marketQuestion,
           walletAddress: h.proxyWallet,
           positionSize: String(h.amount),
-          outcomeSide: 'Down',
+          outcomeSide,
           candleInterval: interval,
           candleCloseTime: String(closeTime),
         })),
@@ -146,7 +153,8 @@ export class PolymarketService {
     }
   }
 
-  private async getTopPositionsByPnl(conditionId: string, marketQuestion: string): Promise<IPosition[]> {
+  private async getTopPositionsByPnl(conditionId: string, marketQuestion: string, outcomeIndex: number): Promise<IPosition[]> {
+    const side = outcomeIndex === 1 ? 'Down' : 'Up';
     try {
       const res = await firstValueFrom(
         this.httpService.get(`${this.appConfig.polymarketDataUrl}/v1/market-positions`, {
@@ -157,18 +165,17 @@ export class PolymarketService {
 
       const groups: PolymarketPositionGroup[] = Array.isArray(res.data) ? res.data : [];
 
-      // Find the Down token group (outcomeIndex === 1)
-      const downGroup = groups.find((g) => g.positions?.[0]?.outcomeIndex === 1);
-      if (!downGroup?.positions?.length) {
-        this.logger.warn(`No Down positions found for market ${conditionId}`);
+      const group = groups.find((g) => g.positions?.[0]?.outcomeIndex === outcomeIndex);
+      if (!group?.positions?.length) {
+        this.logger.warn(`No ${side} positions found for market ${conditionId}`);
         return [];
       }
 
-      const top = downGroup.positions
+      const top = group.positions
         .filter((p) => p.totalPnl > 0)
         .slice(0, this.appConfig.polymarketWinnerCount);
 
-      this.logger.log(`Top Down positions by PNL fetched: ${top.length}`);
+      this.logger.log(`Top ${side} positions by PNL fetched: ${top.length}`);
 
       return top.map((p) => ({
         walletAddress: p.proxyWallet,
