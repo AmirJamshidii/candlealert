@@ -22,7 +22,7 @@ export class AlertService {
 
   @OnEvent('reversal.detected')
   async handleReversalDetected(event: ReversalSignalEvent): Promise<void> {
-    const { signalKey, interval, candle } = event;
+    const { signalKey, interval, candle, snapshotPrice } = event;
 
     try {
       // Fetch Polymarket winners for this signal
@@ -33,7 +33,7 @@ export class AlertService {
         candle.closeTime,
       );
 
-      const message = formatReversalAlert(candle, interval, winners);
+      const message = formatReversalAlert(candle, interval, winners, snapshotPrice, this.appConfig.snapshotWindowMs);
 
       // Send to each chat ID (with dedup)
       await Promise.all(

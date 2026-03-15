@@ -1,0 +1,14 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: candlealert_test
+      POSTGRES_USER: candlealert
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U candlealert -d candlealert_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 15

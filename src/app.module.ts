@@ -9,6 +9,7 @@ import { SignalModule } from './modules/signal/signal.module';
 import { PolymarketModule } from './modules/polymarket/polymarket.module';
 import { AlertModule } from './modules/alert/alert.module';
 import { HealthModule } from './modules/health/health.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { HealthModule } from './modules/health/health.module';
     PolymarketModule,
     AlertModule,
     HealthModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

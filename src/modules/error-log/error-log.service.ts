@@ -18,6 +18,17 @@ export class ErrorLogService {
     private readonly repo: Repository<ErrorLogEntity>,
   ) {}
 
+  async getRecent(limit: number, module?: string): Promise<ErrorLogEntity[]> {
+    const query = this.repo
+      .createQueryBuilder('e')
+      .orderBy('e.createdAt', 'DESC')
+      .take(limit);
+    if (module) {
+      query.where('e.module = :module', { module });
+    }
+    return query.getMany();
+  }
+
   async log(err: unknown, ctx: ErrorContext = {}): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;

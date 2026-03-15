@@ -27,6 +27,7 @@ export class AppConfig {
   get polymarketDataUrl(): string { return this.configService.get<string>('POLYMARKET_DATA_URL'); }
   get polymarketWinnerCount(): number { return this.configService.get<number>('POLYMARKET_WINNER_COUNT'); }
 
+  get snapshotWindowMs(): number { return this.configService.get<number>('SNAPSHOT_WINDOW_MS'); }
   get signalTestMode(): boolean { return this.configService.get<boolean>('SIGNAL_TEST_MODE'); }
 
   get port(): number { return this.configService.get<number>('PORT'); }

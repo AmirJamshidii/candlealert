@@ -31,7 +31,10 @@ export function formatReversalAlert(
   candle: ICandle,
   interval: string,
   winners: IWinner[],
+  snapshotPrice: number | null,
+  snapshotWindowMs: number = 10000,
 ): string {
+  const snapshotWindowS = snapshotWindowMs / 1000;
   const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
   const eventLink = `https://polymarket.com/event/${eventSlug}`;
 
@@ -53,7 +56,9 @@ export function formatReversalAlert(
     '',
     formatCandle(candle),
     '',
-    'Was GREEN at T-10s → Closed RED',
+    snapshotPrice != null
+      ? `Was GREEN at T-${snapshotWindowS}s → ${formatPrice(snapshotPrice)} → Closed RED`
+      : `Was GREEN at T-${snapshotWindowS}s → Closed RED`,
     '',
     `📊 Top ${winners.length} Polymarket Down Holders (${marketQuestion})`,
     `🔗 ${eventLink}`,

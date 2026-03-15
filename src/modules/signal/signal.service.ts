@@ -6,8 +6,6 @@ import { ReversalSignalEvent } from '../../events/reversal-signal.event';
 import { SignalStateService } from './signal-state.service';
 import { AppConfig } from '../../config/app.config';
 
-const REVERSAL_WINDOW_MS = 10_000; // 10 seconds before close
-
 @Injectable()
 export class SignalService {
   private readonly logger = new Logger(SignalService.name);
@@ -24,9 +22,9 @@ export class SignalService {
     const now = Date.now();
     const timeRemaining = candle.closeTime - now;
 
-    // Snapshot at T-10s if not done yet for this candle
+    // Snapshot at T-Ns if not done yet for this candle
     if (
-      timeRemaining <= REVERSAL_WINDOW_MS &&
+      timeRemaining <= this.appConfig.snapshotWindowMs &&
       timeRemaining > 0 &&
       !this.signalStateService.hasSnapshot(interval, candle.openTime)
     ) {
@@ -52,7 +50,8 @@ export class SignalService {
             ? `[${interval}] TEST MODE: forcing signal. Key: ${signalKey}`
             : `[${interval}] REVERSAL detected! Was green at ${snapshot.closeAtSnapshot}, closed red at ${candle.close}. Key: ${signalKey}`,
         );
-        this.eventEmitter.emit('reversal.detected', new ReversalSignalEvent(signalKey, interval, candle));
+        const snapshotPrice = snapshot?.closeAtSnapshot ?? null;
+        this.eventEmitter.emit('reversal.detected', new ReversalSignalEvent(signalKey, interval, candle, snapshotPrice));
       }
 
       // Always clean up snapshot on close

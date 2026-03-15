@@ -24,6 +24,9 @@ export const configValidationSchema = Joi.object({
   POLYMARKET_DATA_URL: Joi.string().default('https://data-api.polymarket.com'),
   POLYMARKET_WINNER_COUNT: Joi.number().integer().min(1).max(50).default(10),
 
+  // Signal
+  SNAPSHOT_WINDOW_MS: Joi.number().integer().min(1000).default(10000),
+
   // Testing
   SIGNAL_TEST_MODE: Joi.boolean().default(false),
 
