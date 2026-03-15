@@ -41,10 +41,10 @@ export function formatReversalAlert(
   const winnerLines = winners.length
     ? winners
         .map((w, i) => {
-          const display = w.name ? `${w.name} (${abbreviateAddress(w.walletAddress)})` : abbreviateAddress(w.walletAddress);
+          const label = w.name || abbreviateAddress(w.walletAddress);
           const shares = Math.round(w.positionSize).toLocaleString('en-US');
           const link = `https://polymarket.com/profile/${w.walletAddress}`;
-          return `${i + 1}. ${display} — ${shares} shares\n   ${link}`;
+          return `${i + 1}. <a href="${link}">${label}</a> — ${shares} shares`;
         })
         .join('\n')
     : 'No holders data available';
