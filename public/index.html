@@ -5,258 +5,463 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CandleAlert Dashboard</title>
 
-  <!-- Bootstrap 5 -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <!-- Bootstrap Icons -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
-  <!-- DataTables + Bootstrap 5 theme -->
-  <link href="https://cdn.datatables.net/2.0.7/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+  <!-- Roboto + Material Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+
+  <!-- DataTables (unstyled, we style manually) -->
+  <link href="https://cdn.datatables.net/2.0.7/css/dataTables.min.css" rel="stylesheet" />
 
   <style>
-    body { background: #0f1117; color: #e2e8f0; }
-    .navbar { background: #161b22 !important; border-bottom: 1px solid #30363d; }
-    .navbar-brand, .navbar * { color: #e2e8f0 !important; }
-    .card { background: #161b22; border: 1px solid #30363d; }
-    .card-header { background: #1c2128; border-bottom: 1px solid #30363d; font-weight: 600; color: #e2e8f0; }
-    .stat-value { font-size: 2rem; font-weight: 700; }
-    .text-muted { color: #8b949e !important; }
-    /* DataTables dark theme */
-    table.dataTable thead { background: #1c2128; }
-    table.dataTable thead th { color: #e2e8f0 !important; }
-    .dataTables_wrapper { color: #e2e8f0; }
-    .dataTables_wrapper label { color: #e2e8f0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Roboto', sans-serif; font-size: 14px; }
+
+    /* ── Palette (Gmail dark) ── */
+    :root {
+      --bg:        #131314;
+      --surface:   #1e1e1e;
+      --surface2:  #2a2a2a;
+      --border:    #3c3c3c;
+      --primary:   #1a73e8;
+      --primary-bg:#0d2137;
+      --on-primary:#aecbfa;
+      --text:      #e8eaed;
+      --text2:     #9aa0a6;
+      --text3:     #5f6368;
+      --green:     #34a853;
+      --red:       #ea4335;
+      --yellow:    #fbbc04;
+      --teal:      #00bcd4;
+      --sidebar-w: 260px;
+      --topbar-h:  64px;
+    }
+
+    body { background: var(--bg); color: var(--text); display: flex; }
+
+    /* ════════════ SIDEBAR ════════════ */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--surface);
+      position: fixed; left: 0; top: 0; bottom: 0;
+      display: flex; flex-direction: column;
+      border-right: 1px solid var(--border);
+      z-index: 200;
+    }
+
+    .sidebar-brand {
+      height: var(--topbar-h);
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .brand-logo {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: var(--primary); display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 18px; color: #fff; flex-shrink: 0;
+    }
+    .brand-name { font-size: 16px; font-weight: 500; color: var(--text); line-height: 1.25; }
+    .brand-sub  { font-size: 11px; color: var(--text2); }
+
+    .sidebar-nav { flex: 1; padding: 8px 0; overflow-y: auto; }
+
+    .nav-item {
+      display: flex; align-items: center; gap: 16px;
+      padding: 11px 20px; cursor: pointer;
+      border-radius: 0 24px 24px 0; margin-right: 12px;
+      color: var(--text2); font-size: 14px; font-weight: 400;
+      transition: background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item:hover .material-icons { color: var(--text); }
+    .nav-item.active { background: var(--primary-bg); color: var(--on-primary); font-weight: 500; }
+    .nav-item.active .material-icons { color: var(--on-primary); }
+    .nav-item .material-icons { font-size: 20px; color: var(--text3); flex-shrink: 0; }
+
+    .nav-divider { border: none; border-top: 1px solid var(--border); margin: 6px 12px; }
+
+    .sidebar-footer {
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text2);
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .sidebar-footer .material-icons { font-size: 16px; }
+    #countdown { color: var(--text); font-weight: 500; }
+
+    /* ════════════ MAIN ════════════ */
+    .main {
+      margin-left: var(--sidebar-w);
+      flex: 1; min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Top Bar ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      height: var(--topbar-h); background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; padding: 0 28px; gap: 16px;
+    }
+    .topbar-title { font-size: 18px; font-weight: 400; color: var(--text); flex: 1; }
+    .topbar-meta  { font-size: 13px; color: var(--text2); }
+
+    .health-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+    }
+    .health-pill .material-icons { font-size: 16px; }
+    .health-pill.ok      { background: #0d3323; color: #81c995; }
+    .health-pill.err     { background: #3b1515; color: #f28b82; }
+    .health-pill.loading { background: var(--surface2); color: var(--text2); }
+
+    /* ── Content ── */
+    .content { padding: 28px; flex: 1; }
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Stat Cards ── */
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 22px 24px;
+    }
+    .stat-label {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 500; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text2); margin-bottom: 12px;
+    }
+    .stat-label .material-icons { font-size: 16px; }
+    .stat-number { font-size: 36px; font-weight: 300; line-height: 1; }
+    .stat-number.green { color: var(--green); }
+    .stat-number.blue  { color: var(--primary); }
+    .stat-number.teal  { color: var(--teal); }
+    .intervals-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .chip {
+      display: inline-block; background: var(--surface2); color: var(--on-primary);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 4px 14px; font-size: 13px; font-weight: 500;
+    }
+
+    /* ── Charts ── */
+    .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+    .chart-card-header {
+      padding: 16px 20px; font-size: 13px; font-weight: 500; color: var(--text2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .chart-card-header .material-icons { font-size: 18px; }
+    .chart-card-body { padding: 20px; }
+    .chart-card-body.center { display: flex; align-items: center; justify-content: center; min-height: 230px; }
+
+    /* ── Section header ── */
+    .section-header { margin-bottom: 20px; }
+    .section-title { font-size: 16px; font-weight: 500; color: var(--text); }
+    .section-sub   { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+    /* ── Table card ── */
+    .table-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+
+    /* ── DataTables ── */
+    .dataTables_wrapper { padding: 16px 20px; color: var(--text); }
+    .dataTables_wrapper .dataTables_filter,
+    .dataTables_wrapper .dataTables_length { margin-bottom: 12px; }
+    .dataTables_wrapper .dataTables_filter label,
+    .dataTables_wrapper .dataTables_length label { color: var(--text2); font-size: 13px; display: flex; align-items: center; gap: 6px; }
     .dataTables_wrapper .dataTables_filter input,
     .dataTables_wrapper .dataTables_length select {
-      background: #0f1117; color: #e2e8f0; border: 1px solid #30363d; border-radius: 4px; padding: 2px 6px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 5px 10px; outline: none; font-family: 'Roboto', sans-serif; font-size: 13px;
     }
-    .dataTables_wrapper .dataTables_info,
-    .dataTables_wrapper .dataTables_paginate { color: #8b949e; }
-    .dataTables_wrapper .dataTables_paginate .paginate_button { color: #8b949e !important; }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: #238636 !important; border-color: #238636 !important; color: #fff !important; border-radius: 4px; }
-    .table { color: #e2e8f0; }
-    .table > :not(caption) > * > * { background: transparent; color: #e2e8f0; border-bottom-color: #30363d; }
-    .table-hover > tbody > tr:hover > * { background: #1c2128; }
-    a { color: #58a6ff; } a:hover { color: #79c0ff; }
-    .nav-tabs .nav-link { color: #8b949e; border: none; }
-    .nav-tabs .nav-link.active { color: #e2e8f0; background: #161b22; border-bottom: 2px solid #238636; }
-    .nav-tabs { border-bottom: 1px solid #30363d; }
-    .badge-module { font-size: 0.75rem; }
-    #refreshBadge { font-size: 0.75rem; }
+    .dataTables_wrapper .dataTables_filter input:focus,
+    .dataTables_wrapper .dataTables_length select:focus { border-color: var(--primary); }
+
+    table.dataTable { border-collapse: collapse !important; width: 100% !important; }
+    table.dataTable thead tr { border-bottom: 1px solid var(--border); }
+    table.dataTable thead th {
+      background: var(--surface2) !important; color: var(--text2) !important;
+      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em;
+      padding: 10px 14px; border: none !important; white-space: nowrap;
+    }
+    table.dataTable thead th.sorting::after,
+    table.dataTable thead th.sorting_asc::after,
+    table.dataTable thead th.sorting_desc::after { color: var(--text3); }
+    table.dataTable tbody tr { border-bottom: 1px solid var(--border); }
+    table.dataTable tbody tr:last-child { border-bottom: none; }
+    table.dataTable tbody td { color: var(--text); padding: 13px 14px; font-size: 14px; border: none !important; background: transparent !important; }
+    table.dataTable tbody tr:hover td { background: var(--surface2) !important; }
+
+    .dataTables_wrapper .dataTables_info { color: var(--text2); font-size: 12px; padding-top: 10px; }
+    .dataTables_wrapper .dataTables_paginate { padding-top: 10px; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+      color: var(--text2) !important; border: none !important; background: none !important;
+      border-radius: 6px; padding: 4px 10px !important; font-size: 13px;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover  { background: var(--surface2) !important; color: var(--text) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: var(--primary) !important; color: #fff !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { color: var(--text3) !important; cursor: default; }
+
+    /* ── Inline badges ── */
+    .badge-interval {
+      display: inline-block; background: var(--surface2); color: var(--on-primary);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 2px 9px; font-size: 12px; font-weight: 500;
+    }
+    .badge-error {
+      display: inline-block; background: #3b1515; color: #f28b82;
+      border-radius: 6px; padding: 2px 9px; font-size: 12px; font-weight: 500;
+    }
+
+    a { color: var(--on-primary); text-decoration: none; }
+    a:hover { color: #8ab4f8; text-decoration: underline; }
   </style>
 </head>
 <body>
 
-<!-- Navbar -->
-<nav class="navbar navbar-dark px-4 py-2">
-  <span class="navbar-brand fw-bold"><i class="bi bi-activity text-success me-2"></i>CandleAlert Dashboard</span>
-  <div class="d-flex align-items-center gap-3">
-    <span id="healthBadge" class="badge bg-secondary">Checking...</span>
-    <span id="refreshBadge" class="text-muted">Auto-refresh in <span id="countdown">60</span>s</span>
-  </div>
-</nav>
-
-<div class="container-fluid py-4 px-4">
-
-  <!-- Stat Cards -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-body text-center py-4">
-          <div class="text-muted mb-1"><i class="bi bi-lightning-charge me-1"></i>Total Signals Fired</div>
-          <div class="stat-value text-success" id="totalSignals">—</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-body text-center py-4">
-          <div class="text-muted mb-1"><i class="bi bi-clock-history me-1"></i>Active Intervals</div>
-          <div id="activeIntervals" class="d-flex justify-content-center gap-2 mt-2 flex-wrap"></div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card h-100">
-        <div class="card-body text-center py-4">
-          <div class="text-muted mb-1"><i class="bi bi-people me-1"></i>Tracked Wallets (30d)</div>
-          <div class="stat-value text-info" id="trackedWallets">—</div>
-        </div>
-      </div>
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">CA</div>
+    <div>
+      <div class="brand-name">CandleAlert</div>
+      <div class="brand-sub">BTC/USDT Monitor</div>
     </div>
   </div>
 
-  <!-- Charts Row -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-8">
-      <div class="card">
-        <div class="card-header"><i class="bi bi-graph-up me-2 text-success"></i>Signal Timeline (last 30 days)</div>
-        <div class="card-body"><canvas id="timelineChart" height="90"></canvas></div>
-      </div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-section="overview">
+      <span class="material-icons">dashboard</span> Overview
     </div>
-    <div class="col-md-4">
-      <div class="card">
-        <div class="card-header"><i class="bi bi-pie-chart me-2 text-warning"></i>Signals by Interval</div>
-        <div class="card-body d-flex align-items-center justify-content-center" style="min-height:220px">
-          <canvas id="intervalChart" style="max-height:200px"></canvas>
+    <div class="nav-item" data-section="leaderboard">
+      <span class="material-icons">leaderboard</span> Wallet Leaderboard
+    </div>
+    <div class="nav-item" data-section="alerts">
+      <span class="material-icons">notifications</span> Recent Alerts
+    </div>
+    <div class="nav-item" data-section="winners">
+      <span class="material-icons">bar_chart</span> Recent Winners
+    </div>
+    <hr class="nav-divider" />
+    <div class="nav-item" data-section="errors">
+      <span class="material-icons">error_outline</span> Error Log
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <span class="material-icons">schedule</span>
+    Auto-refresh in <span id="countdown">60</span>s
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-title" id="topbarTitle">Overview</div>
+    <div id="topbarMeta" class="topbar-meta"></div>
+    <div id="healthBadge" class="health-pill loading">
+      <span class="material-icons">circle</span> Checking...
+    </div>
+  </header>
+
+  <!-- Content -->
+  <main class="content">
+
+    <!-- ── OVERVIEW ── -->
+    <section class="section active" id="overview">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--green)">bolt</span> Total Signals Fired</div>
+          <div class="stat-number green" id="totalSignals">—</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--primary)">schedule</span> Active Intervals</div>
+          <div class="intervals-wrap" id="activeIntervals"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--teal)">account_balance_wallet</span> Tracked Wallets (30d)</div>
+          <div class="stat-number teal" id="trackedWallets">—</div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Tabs -->
-  <div class="card">
-    <div class="card-header p-0">
-      <ul class="nav nav-tabs border-0 px-3 pt-2" id="dashTabs">
-        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabLeaderboard"><i class="bi bi-trophy me-1"></i>Wallet Leaderboard</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAlerts"><i class="bi bi-bell me-1"></i>Recent Alerts</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabWinners"><i class="bi bi-bar-chart me-1"></i>Recent Winners</button></li>
-        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabErrors"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Error Log</button></li>
-      </ul>
-    </div>
-    <div class="card-body tab-content pt-3">
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="material-icons" style="color:var(--primary)">trending_up</span>
+            Signal Timeline — last 30 days
+          </div>
+          <div class="chart-card-body"><canvas id="timelineChart" height="100"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="material-icons" style="color:var(--yellow)">donut_small</span>
+            Signals by Interval
+          </div>
+          <div class="chart-card-body center"><canvas id="intervalChart" style="max-height:200px"></canvas></div>
+        </div>
+      </div>
+    </section>
 
-      <!-- Wallet Leaderboard -->
-      <div class="tab-pane fade show active" id="tabLeaderboard">
-        <table id="tblLeaderboard" class="table table-hover table-sm w-100">
+    <!-- ── LEADERBOARD ── -->
+    <section class="section" id="leaderboard">
+      <div class="section-header">
+        <div class="section-title">Wallet Leaderboard</div>
+        <div class="section-sub">Top recurring down holders — last 30 days</div>
+      </div>
+      <div class="table-card">
+        <table id="tblLeaderboard" style="width:100%">
           <thead><tr><th>#</th><th>Wallet</th><th>Signals</th><th>Total Shares</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
+    </section>
 
-      <!-- Recent Alerts -->
-      <div class="tab-pane fade" id="tabAlerts">
-        <table id="tblAlerts" class="table table-hover table-sm w-100">
+    <!-- ── ALERTS ── -->
+    <section class="section" id="alerts">
+      <div class="section-header">
+        <div class="section-title">Recent Alerts</div>
+        <div class="section-sub">Latest reversal signals sent to Telegram</div>
+      </div>
+      <div class="table-card">
+        <table id="tblAlerts" style="width:100%">
           <thead><tr><th>Time (UTC)</th><th>Interval</th><th>Signal Key</th><th>Chat ID</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
+    </section>
 
-      <!-- Recent Winners -->
-      <div class="tab-pane fade" id="tabWinners">
-        <table id="tblWinners" class="table table-hover table-sm w-100">
+    <!-- ── WINNERS ── -->
+    <section class="section" id="winners">
+      <div class="section-header">
+        <div class="section-title">Recent Winners</div>
+        <div class="section-sub">Latest Polymarket down position holders per signal</div>
+      </div>
+      <div class="table-card">
+        <table id="tblWinners" style="width:100%">
           <thead><tr><th>Time (UTC)</th><th>Interval</th><th>Wallet</th><th>Shares</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
+    </section>
 
-      <!-- Error Log -->
-      <div class="tab-pane fade" id="tabErrors">
-        <table id="tblErrors" class="table table-hover table-sm w-100">
+    <!-- ── ERRORS ── -->
+    <section class="section" id="errors">
+      <div class="section-header">
+        <div class="section-title">Error Log</div>
+        <div class="section-sub">Recent system errors by module</div>
+      </div>
+      <div class="table-card">
+        <table id="tblErrors" style="width:100%">
           <thead><tr><th>Time (UTC)</th><th>Module</th><th>Message</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
+    </section>
 
-    </div>
-  </div>
-
+  </main>
 </div>
 
 <!-- Scripts -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 <script src="https://cdn.datatables.net/2.0.7/js/dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/2.0.7/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 
 <script>
-const INTERVAL_COLORS = ['#238636','#1f6feb','#f78166','#d29922','#8957e5','#3fb950'];
-const DT_OPTS = { pageLength: 10, order: [], language: { emptyTable: 'No data yet' } };
+const COLORS = ['#1a73e8','#34a853','#fbbc04','#ea4335','#8957e5','#00bcd4'];
+const DT_OPTS = { pageLength: 10, order: [], language: { emptyTable: 'No data available', zeroRecords: 'No matching records' } };
+const TITLES = { overview: 'Overview', leaderboard: 'Wallet Leaderboard', alerts: 'Recent Alerts', winners: 'Recent Winners', errors: 'Error Log' };
 
 let timelineChart, intervalChart;
 const dtInstances = {};
 
-function abbrev(addr) {
-  if (!addr || addr.length <= 12) return addr;
-  return addr.slice(0, 6) + '...' + addr.slice(-4);
-}
+// ── Sidebar navigation ──
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const sec = item.dataset.section;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById(sec).classList.add('active');
+    document.getElementById('topbarTitle').textContent = TITLES[sec] || sec;
+  });
+});
 
-function profileLink(addr) {
-  return `<a href="https://polymarket.com/profile/${addr}" target="_blank" rel="noopener">${abbrev(addr)}</a>`;
-}
-
-function fmtTime(ts) {
-  const d = new Date(typeof ts === 'number' ? ts : ts);
-  return d.toUTCString().replace(' GMT', ' UTC');
-}
-
-function fmtNum(n) {
-  return parseFloat(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
-}
+// ── Helpers ──
+function abbrev(a) { return (!a || a.length <= 12) ? a : a.slice(0,6)+'...'+a.slice(-4); }
+function profileLink(a) { return `<a href="https://polymarket.com/profile/${a}" target="_blank" rel="noopener">${abbrev(a)}</a>`; }
+function fmtTime(ts) { return new Date(ts).toUTCString().replace(' GMT',' UTC'); }
+function fmtNum(n) { return parseFloat(n).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
 
 function initTable(id, opts) {
-  if (dtInstances[id]) { dtInstances[id].destroy(); $(`#${id} tbody`).empty(); }
+  if (dtInstances[id]) { dtInstances[id].destroy(); document.querySelector(`#${id} tbody`).innerHTML = ''; }
   dtInstances[id] = $(`#${id}`).DataTable({ ...DT_OPTS, ...opts });
   return dtInstances[id];
 }
 
 async function fetchJSON(url) {
-  try { const r = await fetch(url); return r.ok ? r.json() : null; }
-  catch { return null; }
+  try { const r = await fetch(url); return r.ok ? r.json() : null; } catch { return null; }
 }
 
+// ── Loaders ──
 async function loadHealth() {
-  const data = await fetchJSON('/api/health');
+  const d = await fetchJSON('/api/health');
   const el = document.getElementById('healthBadge');
-  if (data?.status === 'ok') { el.className = 'badge bg-success'; el.textContent = 'Healthy'; }
-  else { el.className = 'badge bg-danger'; el.textContent = 'Unhealthy'; }
+  if (d?.status === 'ok') {
+    el.className = 'health-pill ok';
+    el.innerHTML = '<span class="material-icons">check_circle</span> Healthy';
+  } else {
+    el.className = 'health-pill err';
+    el.innerHTML = '<span class="material-icons">error</span> Unhealthy';
+  }
 }
 
 async function loadConfig() {
-  const data = await fetchJSON('/api/config');
-  if (!data) return;
-  const el = document.getElementById('activeIntervals');
-  el.innerHTML = (data.intervals || []).map(i =>
-    `<span class="badge bg-secondary fs-6 px-3">${i}</span>`
-  ).join('');
+  const d = await fetchJSON('/api/config');
+  if (!d) return;
+  document.getElementById('activeIntervals').innerHTML = (d.intervals||[]).map(i => `<span class="chip">${i}</span>`).join('');
+  document.getElementById('topbarMeta').textContent = `${d.symbol} · ${(d.intervals||[]).join(', ')}`;
 }
 
 async function loadSummary() {
-  const data = await fetchJSON('/api/analytics/signals/summary');
-  if (!data) return;
-  const total = data.reduce((s, r) => s + Number(r.count), 0);
-  document.getElementById('totalSignals').textContent = total.toLocaleString();
-
-  const labels = data.map(r => r.interval);
-  const counts = data.map(r => Number(r.count));
-  const colors = labels.map((_, i) => INTERVAL_COLORS[i % INTERVAL_COLORS.length]);
-
+  const d = await fetchJSON('/api/analytics/signals/summary');
+  if (!d) return;
+  document.getElementById('totalSignals').textContent = d.reduce((s,r) => s + Number(r.count), 0).toLocaleString();
+  const labels = d.map(r => r.interval);
+  const counts = d.map(r => Number(r.count));
   if (intervalChart) intervalChart.destroy();
   intervalChart = new Chart(document.getElementById('intervalChart'), {
     type: 'doughnut',
-    data: { labels, datasets: [{ data: counts, backgroundColor: colors, borderWidth: 0 }] },
-    options: {
-      plugins: { legend: { labels: { color: '#e2e8f0' } } },
-      cutout: '60%',
-    },
+    data: { labels, datasets: [{ data: counts, backgroundColor: labels.map((_,i) => COLORS[i%COLORS.length]), borderWidth: 0 }] },
+    options: { cutout: '65%', plugins: { legend: { labels: { color: '#9aa0a6', font: { family: 'Roboto' } } } } },
   });
 }
 
 async function loadTimeline() {
-  const data = await fetchJSON('/api/analytics/signals/timeline?days=30');
-  if (!data) return;
-  const labels = data.map(r => r.date);
-  const counts = data.map(r => Number(r.count));
-
+  const d = await fetchJSON('/api/analytics/signals/timeline?days=30');
+  if (!d) return;
   if (timelineChart) timelineChart.destroy();
   timelineChart = new Chart(document.getElementById('timelineChart'), {
     type: 'line',
     data: {
-      labels,
-      datasets: [{
-        label: 'Signals',
-        data: counts,
-        borderColor: '#238636',
-        backgroundColor: 'rgba(35,134,54,0.15)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 3,
-      }],
+      labels: d.map(r => r.date),
+      datasets: [{ label: 'Signals', data: d.map(r => Number(r.count)),
+        borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.1)',
+        fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#1a73e8' }],
     },
     options: {
       scales: {
-        x: { ticks: { color: '#8b949e', maxTicksLimit: 10 }, grid: { color: '#30363d' } },
-        y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, beginAtZero: true },
+        x: { ticks: { color: '#9aa0a6', maxTicksLimit: 10, font: { family: 'Roboto', size: 12 } }, grid: { color: '#3c3c3c' } },
+        y: { ticks: { color: '#9aa0a6', font: { family: 'Roboto', size: 12 } }, grid: { color: '#3c3c3c' }, beginAtZero: true },
       },
       plugins: { legend: { display: false } },
     },
@@ -264,81 +469,48 @@ async function loadTimeline() {
 }
 
 async function loadLeaderboard() {
-  const data = await fetchJSON('/api/analytics/holders/leaderboard?days=30&limit=20');
-  if (!data) return;
-  document.getElementById('trackedWallets').textContent = data.length;
-  const rows = data.map((r, i) => [
-    i + 1,
-    profileLink(r.walletAddress),
-    r.signalCount,
-    fmtNum(r.totalPosition),
-  ]);
+  const d = await fetchJSON('/api/analytics/holders/leaderboard?days=30&limit=20');
+  if (!d) return;
+  document.getElementById('trackedWallets').textContent = d.length;
   const dt = initTable('tblLeaderboard', { columnDefs: [{ orderable: false, targets: 1 }] });
-  rows.forEach(r => dt.row.add(r));
+  d.forEach((r,i) => dt.row.add([i+1, profileLink(r.walletAddress), r.signalCount, fmtNum(r.totalPosition)]));
   dt.draw();
 }
 
 async function loadAlerts() {
-  const data = await fetchJSON('/api/alerts?limit=50');
-  if (!data) return;
-  const rows = data.map(r => [
-    fmtTime(Number(r.candleCloseTime)),
-    `<span class="badge bg-secondary">${r.interval}</span>`,
-    r.signalKey,
-    r.chatId,
-  ]);
+  const d = await fetchJSON('/api/alerts?limit=50');
+  if (!d) return;
   const dt = initTable('tblAlerts', {});
-  rows.forEach(r => dt.row.add(r));
+  d.forEach(r => dt.row.add([fmtTime(Number(r.candleCloseTime)), `<span class="badge-interval">${r.interval}</span>`, r.signalKey, r.chatId]));
   dt.draw();
 }
 
 async function loadWinners() {
-  const data = await fetchJSON('/api/winners?limit=100');
-  if (!data) return;
-  const rows = data.map(r => [
-    fmtTime(new Date(r.createdAt)),
-    `<span class="badge bg-secondary">${r.candleInterval}</span>`,
-    profileLink(r.walletAddress),
-    fmtNum(r.positionSize),
-  ]);
+  const d = await fetchJSON('/api/winners?limit=100');
+  if (!d) return;
   const dt = initTable('tblWinners', { columnDefs: [{ orderable: false, targets: 2 }] });
-  rows.forEach(r => dt.row.add(r));
+  d.forEach(r => dt.row.add([fmtTime(new Date(r.createdAt)), `<span class="badge-interval">${r.candleInterval}</span>`, profileLink(r.walletAddress), fmtNum(r.positionSize)]));
   dt.draw();
 }
 
 async function loadErrors() {
-  const data = await fetchJSON('/api/analytics/errors');
-  if (!data) return;
-  const rows = data.map(r => [
+  const d = await fetchJSON('/api/analytics/errors');
+  if (!d) return;
+  const dt = initTable('tblErrors', { columnDefs: [{ orderable: false, targets: [1,2] }] });
+  d.forEach(r => dt.row.add([
     fmtTime(new Date(r.createdAt)),
-    r.module ? `<span class="badge bg-warning text-dark badge-module">${r.module}</span>` : '—',
-    `<span title="${(r.message || '').replace(/"/g, '&quot;')}">${(r.message || '').slice(0, 120)}${r.message?.length > 120 ? '…' : ''}</span>`,
-  ]);
-  const dt = initTable('tblErrors', { columnDefs: [{ orderable: false, targets: [1, 2] }] });
-  rows.forEach(r => dt.row.add(r));
+    r.module ? `<span class="badge-error">${r.module}</span>` : '—',
+    `<span title="${(r.message||'').replace(/"/g,'&quot;')}">${(r.message||'').slice(0,120)}${(r.message||'').length>120?'…':''}</span>`,
+  ]));
   dt.draw();
 }
 
 async function loadAll() {
-  await Promise.all([
-    loadHealth(),
-    loadConfig(),
-    loadSummary(),
-    loadTimeline(),
-    loadLeaderboard(),
-    loadAlerts(),
-    loadWinners(),
-    loadErrors(),
-  ]);
+  await Promise.all([loadHealth(), loadConfig(), loadSummary(), loadTimeline(), loadLeaderboard(), loadAlerts(), loadWinners(), loadErrors()]);
 }
 
-// Countdown + auto-refresh
 let timer = 60;
-setInterval(() => {
-  timer--;
-  document.getElementById('countdown').textContent = timer;
-  if (timer <= 0) { timer = 60; loadAll(); }
-}, 1000);
+setInterval(() => { timer--; document.getElementById('countdown').textContent = timer; if (timer <= 0) { timer = 60; loadAll(); } }, 1000);
 
 loadAll();
 </script>
