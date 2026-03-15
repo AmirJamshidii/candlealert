@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
-  <!-- DataTables: no default CSS, fully custom-styled -->
+  <!-- Grid.js (no theme — fully custom) -->
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -169,83 +169,152 @@
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
     }
 
-    /* ── DataTables ── */
-    .dataTables_wrapper {
-      padding: 16px 20px; color: var(--text); font-family: 'Roboto', sans-serif;
+    /* ── Grid.js — full custom dark theme (no mermaid base) ── */
+    .gridjs-container {
+      color: var(--text);
+      font-family: 'Roboto', sans-serif;
+      padding: 16px 20px;
+      width: 100%;
     }
-    /* top bar: length left, filter right */
-    .dataTables_wrapper > .dataTables_length,
-    .dataTables_wrapper > .dataTables_filter {
-      display: inline-block; margin-bottom: 14px;
+    .gridjs-wrapper {
+      border: none;
+      border-radius: 0;
+      box-shadow: none;
+      overflow-x: auto;
     }
-    .dataTables_wrapper > .dataTables_filter { float: right; }
-    .dataTables_wrapper::after { content: ''; display: table; clear: both; }
 
-    .dataTables_wrapper .dataTables_length label,
-    .dataTables_wrapper .dataTables_filter label {
-      color: var(--text2); font-size: 13px;
-      display: flex; align-items: center; gap: 8px;
+    /* Search */
+    .gridjs-head { margin-bottom: 14px; overflow: hidden; }
+    .gridjs-search { float: right; }
+    .gridjs-search-input {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-family: 'Roboto', sans-serif;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 220px;
     }
-    .dataTables_wrapper .dataTables_length select,
-    .dataTables_wrapper .dataTables_filter input {
-      background: var(--surface2) !important; color: var(--text) !important;
-      border: 1px solid var(--border) !important; border-radius: 6px !important;
-      padding: 6px 10px !important; outline: none !important;
-      font-family: 'Roboto', sans-serif !important; font-size: 13px !important;
-      -webkit-appearance: auto; appearance: auto;
-    }
-    .dataTables_wrapper .dataTables_length select:focus,
-    .dataTables_wrapper .dataTables_filter input:focus { border-color: var(--primary) !important; }
+    .gridjs-search-input:focus { border-color: var(--primary); }
+    .gridjs-search-input::placeholder { color: var(--text3); }
 
-    table.dataTable { border-collapse: collapse !important; width: 100% !important; }
-    table.dataTable thead tr { border-bottom: 1px solid var(--border); }
-    table.dataTable thead th {
-      background: var(--surface2) !important; color: var(--text2) !important;
-      font-size: 11px !important; font-weight: 500 !important;
-      text-transform: uppercase; letter-spacing: 0.07em;
-      padding: 10px 14px !important; border: none !important; white-space: nowrap;
+    /* Table */
+    .gridjs-table {
+      border-collapse: collapse;
+      width: 100%;
+      table-layout: auto;
     }
-    table.dataTable thead th.sorting::after,
-    table.dataTable thead th.sorting_asc::after,
-    table.dataTable thead th.sorting_desc::after { color: var(--text3) !important; }
-    table.dataTable tbody tr { border-bottom: 1px solid var(--border); }
-    table.dataTable tbody tr:last-child { border-bottom: none; }
-    table.dataTable tbody td {
-      color: var(--text) !important; padding: 13px 14px !important;
-      font-size: 14px; border: none !important; background: transparent !important;
-    }
-    table.dataTable tbody tr:hover td { background: var(--surface2) !important; }
 
-    /* bottom bar */
-    .dataTables_wrapper .dataTables_info {
-      color: var(--text2); font-size: 12px; padding-top: 12px; float: left;
+    /* Header */
+    .gridjs-th {
+      background: var(--surface2);
+      color: var(--text2);
+      font-family: 'Roboto', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 10px 14px;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      user-select: none;
     }
-    .dataTables_wrapper .dataTables_paginate {
-      padding-top: 8px; float: right;
-      display: flex; align-items: center; gap: 2px;
+    .gridjs-th-content {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      float: none;
+      width: auto;
     }
-    .dataTables_wrapper .dataTables_paginate span { display: flex; gap: 2px; }
-    .dataTables_wrapper .dataTables_paginate .paginate_button,
-    .dataTables_wrapper .dataTables_paginate a.paginate_button {
-      display: inline-flex !important; align-items: center; justify-content: center;
-      min-width: 32px; height: 32px; padding: 0 8px !important;
-      border-radius: 6px !important; border: none !important;
-      background: transparent !important; color: var(--text2) !important;
-      font-size: 13px !important; font-family: 'Roboto', sans-serif !important;
-      cursor: pointer; text-decoration: none; line-height: 1;
+    .gridjs-th.gridjs-th-sort { cursor: pointer; }
+    .gridjs-th.gridjs-th-sort:hover { background: #323232; }
+    /* hide default sort button */
+    .gridjs-th button.gridjs-sort { display: none; }
+    .gridjs-th-sort .gridjs-th-content::after { content: ' ↕'; font-size: 10px; color: var(--text3); }
+    .gridjs-th-sort-asc .gridjs-th-content::after { content: ' ↑'; color: var(--primary); }
+    .gridjs-th-sort-desc .gridjs-th-content::after { content: ' ↓'; color: var(--primary); }
+
+    /* Body */
+    .gridjs-tbody { background: transparent; }
+    .gridjs-tr { border-bottom: 1px solid var(--border); }
+    .gridjs-tbody .gridjs-tr:last-child { border-bottom: none; }
+    .gridjs-tbody .gridjs-tr:hover .gridjs-td { background: var(--surface2); }
+    .gridjs-td {
+      background: transparent;
+      color: var(--text);
+      font-family: 'Roboto', sans-serif;
+      font-size: 14px;
+      padding: 13px 14px;
+      border: none;
+    }
+
+    /* Footer */
+    .gridjs-footer {
+      background: transparent;
+      border-top: 1px solid var(--border);
+      border-bottom: none;
+      padding: 10px 0 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .gridjs-summary {
+      color: var(--text2);
+      font-family: 'Roboto', sans-serif;
+      font-size: 12px;
+    }
+    .gridjs-pagination { display: flex; align-items: center; gap: 2px; }
+    .gridjs-pagination .gridjs-pages { display: flex; gap: 2px; }
+    .gridjs-pagination button {
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: var(--text2);
+      font-family: 'Roboto', sans-serif;
+      font-size: 13px;
+      min-width: 32px;
+      height: 32px;
+      padding: 0 8px;
+      cursor: pointer;
       transition: background 0.15s, color 0.15s;
     }
-    .dataTables_wrapper .dataTables_paginate .paginate_button:hover,
-    .dataTables_wrapper .dataTables_paginate a.paginate_button:hover {
-      background: var(--surface2) !important; color: var(--text) !important;
+    .gridjs-pagination button:hover:not([disabled]):not(.gridjs-currentPage) {
+      background: var(--surface2);
+      color: var(--text);
     }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
-    .dataTables_wrapper .dataTables_paginate a.paginate_button.current {
-      background: var(--primary) !important; color: #fff !important; font-weight: 500 !important;
+    .gridjs-pagination button.gridjs-currentPage {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 500;
     }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
-    .dataTables_wrapper .dataTables_paginate a.paginate_button.disabled {
-      color: var(--text3) !important; cursor: default !important; pointer-events: none;
+    .gridjs-pagination button[disabled] {
+      color: var(--text3);
+      cursor: default;
+    }
+    /* select (page size if enabled) */
+    .gridjs-pagination select {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-family: 'Roboto', sans-serif;
+      font-size: 13px;
+    }
+
+    /* Empty / loading */
+    .gridjs-notfound td, .gridjs-loading td {
+      background: transparent;
+      color: var(--text2);
+      font-family: 'Roboto', sans-serif;
+      font-size: 13px;
+      text-align: center;
+      padding: 32px;
+      border: none;
     }
 
     /* ── Inline badges ── */
@@ -357,10 +426,7 @@
         <div class="section-sub">Top recurring down holders — last 30 days</div>
       </div>
       <div class="table-card">
-        <table id="tblLeaderboard" style="width:100%">
-          <thead><tr><th>#</th><th>Wallet</th><th>Signals</th><th>Total Shares</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="tblLeaderboard"></div>
       </div>
     </section>
 
@@ -371,10 +437,7 @@
         <div class="section-sub">Latest reversal signals sent to Telegram</div>
       </div>
       <div class="table-card">
-        <table id="tblAlerts" style="width:100%">
-          <thead><tr><th>Time (UTC)</th><th>Interval</th><th>Signal Key</th><th>Chat ID</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="tblAlerts"></div>
       </div>
     </section>
 
@@ -385,10 +448,7 @@
         <div class="section-sub">Latest Polymarket down position holders per signal</div>
       </div>
       <div class="table-card">
-        <table id="tblWinners" style="width:100%">
-          <thead><tr><th>Time (UTC)</th><th>Interval</th><th>Wallet</th><th>Shares</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="tblWinners"></div>
       </div>
     </section>
 
@@ -399,10 +459,7 @@
         <div class="section-sub">Recent system errors by module</div>
       </div>
       <div class="table-card">
-        <table id="tblErrors" style="width:100%">
-          <thead><tr><th>Time (UTC)</th><th>Module</th><th>Message</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="tblErrors"></div>
       </div>
     </section>
 
@@ -410,17 +467,15 @@
 </div>
 
 <!-- Scripts -->
-<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-<script src="https://cdn.datatables.net/2.0.7/js/dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 
 <script>
 const COLORS = ['#1a73e8','#34a853','#fbbc04','#ea4335','#8957e5','#00bcd4'];
-const DT_OPTS = { pageLength: 10, order: [], language: { emptyTable: 'No data available', zeroRecords: 'No matching records' } };
 const TITLES = { overview: 'Overview', leaderboard: 'Wallet Leaderboard', alerts: 'Recent Alerts', winners: 'Recent Winners', errors: 'Error Log' };
 
 let timelineChart, intervalChart;
-const dtInstances = {};
+const grids = {};
 
 // ── Sidebar navigation ──
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -436,14 +491,31 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
 // ── Helpers ──
 function abbrev(a) { return (!a || a.length <= 12) ? a : a.slice(0,6)+'...'+a.slice(-4); }
-function profileLink(a) { return `<a href="https://polymarket.com/profile/${a}" target="_blank" rel="noopener">${abbrev(a)}</a>`; }
+function profileLink(a) { return gridjs.html(`<a href="https://polymarket.com/profile/${a}" target="_blank" rel="noopener">${abbrev(a)}</a>`); }
 function fmtTime(ts) { return new Date(ts).toUTCString().replace(' GMT',' UTC'); }
 function fmtNum(n) { return parseFloat(n).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
+function badgeInterval(v) { return gridjs.html(`<span class="badge-interval">${v}</span>`); }
+function badgeError(v) { return gridjs.html(`<span class="badge-error">${v}</span>`); }
 
-function initTable(id, opts) {
-  if (dtInstances[id]) { dtInstances[id].destroy(); document.querySelector(`#${id} tbody`).innerHTML = ''; }
-  dtInstances[id] = $(`#${id}`).DataTable({ ...DT_OPTS, ...opts });
-  return dtInstances[id];
+function makeGrid(containerId, columns, data) {
+  if (grids[containerId]) {
+    grids[containerId].updateConfig({ data }).forceRender();
+    return;
+  }
+  grids[containerId] = new gridjs.Grid({
+    columns,
+    data,
+    pagination: { limit: 10 },
+    search: true,
+    sort: true,
+    language: {
+      search: { placeholder: 'Search…' },
+      pagination: { previous: '‹', next: '›', navigate: (p, t) => `Page ${p} of ${t}`, page: p => `Page ${p}`, showing: 'Showing', of: 'of', to: 'to', results: 'results' },
+      loading: 'Loading…',
+      noRecordsFound: 'No records found',
+      error: 'Error loading data',
+    },
+  }).render(document.getElementById(containerId));
 }
 
 async function fetchJSON(url) {
@@ -510,37 +582,41 @@ async function loadLeaderboard() {
   const d = await fetchJSON('/api/analytics/holders/leaderboard?days=30&limit=20');
   if (!d) return;
   document.getElementById('trackedWallets').textContent = d.length;
-  const dt = initTable('tblLeaderboard', { columnDefs: [{ orderable: false, targets: 1 }] });
-  d.forEach((r,i) => dt.row.add([i+1, profileLink(r.walletAddress), r.signalCount, fmtNum(r.totalPosition)]));
-  dt.draw();
+  makeGrid('tblLeaderboard',
+    ['#', { name: 'Wallet', sort: false }, 'Signals', 'Total Shares'],
+    d.map((r, i) => [i + 1, profileLink(r.walletAddress), r.signalCount, fmtNum(r.totalPosition)])
+  );
 }
 
 async function loadAlerts() {
   const d = await fetchJSON('/api/alerts?limit=50');
   if (!d) return;
-  const dt = initTable('tblAlerts', {});
-  d.forEach(r => dt.row.add([fmtTime(Number(r.candleCloseTime)), `<span class="badge-interval">${r.interval}</span>`, r.signalKey, r.chatId]));
-  dt.draw();
+  makeGrid('tblAlerts',
+    ['Time (UTC)', 'Interval', 'Signal Key', 'Chat ID'],
+    d.map(r => [fmtTime(Number(r.candleCloseTime)), badgeInterval(r.interval), r.signalKey, r.chatId])
+  );
 }
 
 async function loadWinners() {
   const d = await fetchJSON('/api/winners?limit=100');
   if (!d) return;
-  const dt = initTable('tblWinners', { columnDefs: [{ orderable: false, targets: 2 }] });
-  d.forEach(r => dt.row.add([fmtTime(new Date(r.createdAt)), `<span class="badge-interval">${r.candleInterval}</span>`, profileLink(r.walletAddress), fmtNum(r.positionSize)]));
-  dt.draw();
+  makeGrid('tblWinners',
+    ['Time (UTC)', 'Interval', { name: 'Wallet', sort: false }, 'Shares'],
+    d.map(r => [fmtTime(new Date(r.createdAt)), badgeInterval(r.candleInterval), profileLink(r.walletAddress), fmtNum(r.positionSize)])
+  );
 }
 
 async function loadErrors() {
   const d = await fetchJSON('/api/analytics/errors');
   if (!d) return;
-  const dt = initTable('tblErrors', { columnDefs: [{ orderable: false, targets: [1,2] }] });
-  d.forEach(r => dt.row.add([
-    fmtTime(new Date(r.createdAt)),
-    r.module ? `<span class="badge-error">${r.module}</span>` : '—',
-    `<span title="${(r.message||'').replace(/"/g,'&quot;')}">${(r.message||'').slice(0,120)}${(r.message||'').length>120?'…':''}</span>`,
-  ]));
-  dt.draw();
+  makeGrid('tblErrors',
+    ['Time (UTC)', { name: 'Module', sort: false }, { name: 'Message', sort: false }],
+    d.map(r => [
+      fmtTime(new Date(r.createdAt)),
+      r.module ? badgeError(r.module) : '—',
+      gridjs.html(`<span title="${(r.message||'').replace(/"/g,'&quot;')}">${(r.message||'').slice(0,120)}${(r.message||'').length>120?'…':''}</span>`),
+    ])
+  );
 }
 
 async function loadAll() {
