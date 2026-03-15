@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AppConfig } from '../../config/app.config';
 import { PolymarketWinnerRepository } from './polymarket-winner.repository';
-import { IWinner } from '../telegram/telegram-message.factory';
+import { IWinner, IPosition } from '../telegram/telegram-message.factory';
 import { ErrorLogService } from '../error-log/error-log.service';
 
 interface PolymarketHolder {
@@ -17,6 +17,19 @@ interface PolymarketHolder {
 interface PolymarketTokenGroup {
   token: string;
   holders: PolymarketHolder[];
+}
+
+interface PolymarketPosition {
+  proxyWallet: string;
+  name?: string;
+  avgPrice: number;
+  totalPnl: number;
+  outcomeIndex: number;
+}
+
+interface PolymarketPositionGroup {
+  token: string;
+  positions: PolymarketPosition[];
 }
 
 @Injectable()
@@ -35,18 +48,22 @@ export class PolymarketService {
     interval: string,
     openTime: number,
     closeTime: number,
-  ): Promise<IWinner[]> {
+  ): Promise<{ holders: IWinner[]; positions: IPosition[] }> {
     try {
       const { conditionId, question } = await this.findMarket(interval, openTime);
       if (!conditionId) {
         this.logger.warn(`No Polymarket market found for btc-updown-${interval}-${Math.floor(openTime / 1000)}`);
-        return [];
+        return { holders: [], positions: [] };
       }
 
-      return await this.getTopDownHolders(conditionId, question, signalKey, interval, closeTime);
+      const [holders, positions] = await Promise.all([
+        this.getTopDownHolders(conditionId, question, signalKey, interval, closeTime),
+        this.getTopPositionsByPnl(conditionId, question),
+      ]);
+      return { holders, positions };
     } catch (err) {
       this.errorLogService.log(err, { module: 'polymarket' });
-      return [];
+      return { holders: [], positions: [] };
     }
   }
 
@@ -125,6 +142,43 @@ export class PolymarketService {
       }));
     } catch (err) {
       this.logger.error('Failed to fetch Polymarket holders', err);
+      return [];
+    }
+  }
+
+  private async getTopPositionsByPnl(conditionId: string, marketQuestion: string): Promise<IPosition[]> {
+    try {
+      const res = await firstValueFrom(
+        this.httpService.get(`${this.appConfig.polymarketDataUrl}/v1/market-positions`, {
+          params: { market: conditionId, limit: 500, sortBy: 'CASH_PNL', sortDirection: 'DESC' },
+          timeout: 15_000,
+        }),
+      );
+
+      const groups: PolymarketPositionGroup[] = Array.isArray(res.data) ? res.data : [];
+
+      // Find the Down token group (outcomeIndex === 1)
+      const downGroup = groups.find((g) => g.positions?.[0]?.outcomeIndex === 1);
+      if (!downGroup?.positions?.length) {
+        this.logger.warn(`No Down positions found for market ${conditionId}`);
+        return [];
+      }
+
+      const top = downGroup.positions
+        .filter((p) => p.totalPnl > 0)
+        .slice(0, this.appConfig.polymarketWinnerCount);
+
+      this.logger.log(`Top Down positions by PNL fetched: ${top.length}`);
+
+      return top.map((p) => ({
+        walletAddress: p.proxyWallet,
+        name: p.name || undefined,
+        avgPrice: p.avgPrice,
+        totalPnl: p.totalPnl,
+        marketQuestion,
+      }));
+    } catch (err) {
+      this.logger.error('Failed to fetch Polymarket positions', err);
       return [];
     }
   }

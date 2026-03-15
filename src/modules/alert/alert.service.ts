@@ -26,14 +26,14 @@ export class AlertService {
 
     try {
       // Fetch Polymarket winners for this signal
-      const winners = await this.polymarketService.handleSignal(
+      const { holders, positions } = await this.polymarketService.handleSignal(
         signalKey,
         interval,
         candle.openTime,
         candle.closeTime,
       );
 
-      const message = formatReversalAlert(candle, interval, winners, snapshotPrice, this.appConfig.snapshotWindowMs);
+      const message = formatReversalAlert(candle, interval, holders, snapshotPrice, this.appConfig.snapshotWindowMs, positions);
 
       // Send to each chat ID (with dedup)
       await Promise.all(

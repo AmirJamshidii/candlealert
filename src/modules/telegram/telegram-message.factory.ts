@@ -7,6 +7,14 @@ export interface IWinner {
   name?: string;
 }
 
+export interface IPosition {
+  walletAddress: string;
+  name?: string;
+  avgPrice: number;
+  totalPnl: number;
+  marketQuestion: string;
+}
+
 function formatPrice(n: number): string {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -33,6 +41,7 @@ export function formatReversalAlert(
   winners: IWinner[],
   snapshotPrice: number | null,
   snapshotWindowMs: number = 10000,
+  positions: IPosition[] = [],
 ): string {
   const snapshotWindowS = snapshotWindowMs / 1000;
   const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
@@ -51,6 +60,14 @@ export function formatReversalAlert(
 
   const marketQuestion = winners[0]?.marketQuestion ?? 'BTC price market';
 
+  const positionLines = positions
+    .map((p, i) => {
+      const label = p.name || abbreviateAddress(p.walletAddress);
+      const link = `https://polymarket.com/profile/${p.walletAddress}`;
+      return `${i + 1}. <a href="${link}">${label}</a> — avg ${formatPrice(p.avgPrice)} | PNL ${formatPrice(p.totalPnl)}`;
+    })
+    .join('\n');
+
   return [
     `🔴 BTC Reversal Signal [${interval}]`,
     '',
@@ -64,6 +81,9 @@ export function formatReversalAlert(
     `🔗 ${eventLink}`,
     '',
     winnerLines,
+    ...(positions.length
+      ? ['', `💰 Top ${positions.length} Polymarket Down Positions by PNL`, '', positionLines]
+      : []),
   ].join('\n');
 }
 
