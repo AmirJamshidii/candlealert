@@ -9,8 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
-  <!-- DataTables (unstyled, we style manually) -->
-  <link href="https://cdn.datatables.net/2.0.7/css/dataTables.min.css" rel="stylesheet" />
+  <!-- DataTables: no default CSS, fully custom-styled -->
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -171,44 +170,83 @@
     }
 
     /* ── DataTables ── */
-    .dataTables_wrapper { padding: 16px 20px; color: var(--text); }
-    .dataTables_wrapper .dataTables_filter,
-    .dataTables_wrapper .dataTables_length { margin-bottom: 12px; }
-    .dataTables_wrapper .dataTables_filter label,
-    .dataTables_wrapper .dataTables_length label { color: var(--text2); font-size: 13px; display: flex; align-items: center; gap: 6px; }
-    .dataTables_wrapper .dataTables_filter input,
-    .dataTables_wrapper .dataTables_length select {
-      background: var(--bg); color: var(--text);
-      border: 1px solid var(--border); border-radius: 6px;
-      padding: 5px 10px; outline: none; font-family: 'Roboto', sans-serif; font-size: 13px;
+    .dataTables_wrapper {
+      padding: 16px 20px; color: var(--text); font-family: 'Roboto', sans-serif;
     }
-    .dataTables_wrapper .dataTables_filter input:focus,
-    .dataTables_wrapper .dataTables_length select:focus { border-color: var(--primary); }
+    /* top bar: length left, filter right */
+    .dataTables_wrapper > .dataTables_length,
+    .dataTables_wrapper > .dataTables_filter {
+      display: inline-block; margin-bottom: 14px;
+    }
+    .dataTables_wrapper > .dataTables_filter { float: right; }
+    .dataTables_wrapper::after { content: ''; display: table; clear: both; }
+
+    .dataTables_wrapper .dataTables_length label,
+    .dataTables_wrapper .dataTables_filter label {
+      color: var(--text2); font-size: 13px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+      background: var(--surface2) !important; color: var(--text) !important;
+      border: 1px solid var(--border) !important; border-radius: 6px !important;
+      padding: 6px 10px !important; outline: none !important;
+      font-family: 'Roboto', sans-serif !important; font-size: 13px !important;
+      -webkit-appearance: auto; appearance: auto;
+    }
+    .dataTables_wrapper .dataTables_length select:focus,
+    .dataTables_wrapper .dataTables_filter input:focus { border-color: var(--primary) !important; }
 
     table.dataTable { border-collapse: collapse !important; width: 100% !important; }
     table.dataTable thead tr { border-bottom: 1px solid var(--border); }
     table.dataTable thead th {
       background: var(--surface2) !important; color: var(--text2) !important;
-      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em;
-      padding: 10px 14px; border: none !important; white-space: nowrap;
+      font-size: 11px !important; font-weight: 500 !important;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      padding: 10px 14px !important; border: none !important; white-space: nowrap;
     }
     table.dataTable thead th.sorting::after,
     table.dataTable thead th.sorting_asc::after,
-    table.dataTable thead th.sorting_desc::after { color: var(--text3); }
+    table.dataTable thead th.sorting_desc::after { color: var(--text3) !important; }
     table.dataTable tbody tr { border-bottom: 1px solid var(--border); }
     table.dataTable tbody tr:last-child { border-bottom: none; }
-    table.dataTable tbody td { color: var(--text); padding: 13px 14px; font-size: 14px; border: none !important; background: transparent !important; }
+    table.dataTable tbody td {
+      color: var(--text) !important; padding: 13px 14px !important;
+      font-size: 14px; border: none !important; background: transparent !important;
+    }
     table.dataTable tbody tr:hover td { background: var(--surface2) !important; }
 
-    .dataTables_wrapper .dataTables_info { color: var(--text2); font-size: 12px; padding-top: 10px; }
-    .dataTables_wrapper .dataTables_paginate { padding-top: 10px; }
-    .dataTables_wrapper .dataTables_paginate .paginate_button {
-      color: var(--text2) !important; border: none !important; background: none !important;
-      border-radius: 6px; padding: 4px 10px !important; font-size: 13px;
+    /* bottom bar */
+    .dataTables_wrapper .dataTables_info {
+      color: var(--text2); font-size: 12px; padding-top: 12px; float: left;
     }
-    .dataTables_wrapper .dataTables_paginate .paginate_button:hover  { background: var(--surface2) !important; color: var(--text) !important; }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.current { background: var(--primary) !important; color: #fff !important; }
-    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled { color: var(--text3) !important; cursor: default; }
+    .dataTables_wrapper .dataTables_paginate {
+      padding-top: 8px; float: right;
+      display: flex; align-items: center; gap: 2px;
+    }
+    .dataTables_wrapper .dataTables_paginate span { display: flex; gap: 2px; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button,
+    .dataTables_wrapper .dataTables_paginate a.paginate_button {
+      display: inline-flex !important; align-items: center; justify-content: center;
+      min-width: 32px; height: 32px; padding: 0 8px !important;
+      border-radius: 6px !important; border: none !important;
+      background: transparent !important; color: var(--text2) !important;
+      font-size: 13px !important; font-family: 'Roboto', sans-serif !important;
+      cursor: pointer; text-decoration: none; line-height: 1;
+      transition: background 0.15s, color 0.15s;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button:hover,
+    .dataTables_wrapper .dataTables_paginate a.paginate_button:hover {
+      background: var(--surface2) !important; color: var(--text) !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+    .dataTables_wrapper .dataTables_paginate a.paginate_button.current {
+      background: var(--primary) !important; color: #fff !important; font-weight: 500 !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+    .dataTables_wrapper .dataTables_paginate a.paginate_button.disabled {
+      color: var(--text3) !important; cursor: default !important; pointer-events: none;
+    }
 
     /* ── Inline badges ── */
     .badge-interval {
