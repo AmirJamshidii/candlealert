@@ -42,7 +42,7 @@ export class PolymarketService {
     private readonly appConfig: AppConfig,
     private readonly winnerRepo: PolymarketWinnerRepository,
     private readonly errorLogService: ErrorLogService,
-  ) {}
+  ) { }
 
   async handleSignal(
     signalKey: string,
@@ -77,13 +77,16 @@ export class PolymarketService {
     const slug = `btc-updown-${interval}-${Math.floor(openTime / 1000)}`;
     this.logger.log(`Fetching Polymarket market: ${slug}`);
 
+    const url = `${this.appConfig.polymarketGammaUrl}/events`;
+    this.logger.log(`[API] GET ${url} | params: ${JSON.stringify({ slug })}`);
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`${this.appConfig.polymarketGammaUrl}/events`, {
+        this.httpService.get(url, {
           params: { slug },
           timeout: 10_000,
         }),
       );
+      this.logger.log(`[API] GET ${url} → status=${res.status} | events=${Array.isArray(res.data) ? res.data.length : 1}`);
 
       const events: Array<{ markets?: Array<{ conditionId: string; question: string }> }> =
         Array.isArray(res.data) ? res.data : [res.data];
@@ -94,7 +97,7 @@ export class PolymarketService {
       this.logger.log(`conditionId: ${market.conditionId}`);
       return { conditionId: market.conditionId, question: market.question ?? slug };
     } catch (err) {
-      this.logger.error('Failed to fetch Polymarket event', err);
+      this.logger.error(`[API] GET ${url} → FAILED`, err);
       return { conditionId: '', question: '' };
     }
   }
@@ -108,13 +111,16 @@ export class PolymarketService {
     outcomeIndex: number,
     outcomeSide: string,
   ): Promise<IWinner[]> {
+    const holdersUrl = `${this.appConfig.polymarketDataUrl}/holders`;
+    this.logger.log(`[API] GET ${holdersUrl} | params: ${JSON.stringify({ market: conditionId, limit: 500 })}`);
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`${this.appConfig.polymarketDataUrl}/holders`, {
+        this.httpService.get(holdersUrl, {
           params: { market: conditionId, limit: 500 },
           timeout: 15_000,
         }),
       );
+      this.logger.log(`[API] GET ${holdersUrl} → status=${res.status} | groups=${Array.isArray(res.data) ? res.data.length : 0}`);
 
       const groups: PolymarketTokenGroup[] = Array.isArray(res.data) ? res.data : [];
 
@@ -125,7 +131,7 @@ export class PolymarketService {
       }
 
       const top = group.holders.slice(0, this.appConfig.polymarketWinnerCount);
-      this.logger.log(`Top ${outcomeSide} holders fetched: ${top.length}`);
+      this.logger.log(`Top ${outcomeSide} holders fetched: ${top.length} (of ${group.holders.length} total)`);
 
       // Store in DB
       await this.winnerRepo.saveAll(
@@ -148,20 +154,24 @@ export class PolymarketService {
         name: h.name || h.pseudonym || undefined,
       }));
     } catch (err) {
-      this.logger.error('Failed to fetch Polymarket holders', err);
+      this.logger.error(`[API] GET ${holdersUrl} → FAILED`, err);
       return [];
     }
   }
 
   private async getTopPositionsByPnl(conditionId: string, marketQuestion: string, outcomeIndex: number): Promise<IPosition[]> {
     const side = outcomeIndex === 1 ? 'Down' : 'Up';
+    const positionsUrl = `${this.appConfig.polymarketDataUrl}/v1/market-positions`;
+    const positionsParams = { market: conditionId, limit: 500, sortBy: 'TOTAL_PNL', sortDirection: 'DESC' };
+    this.logger.log(`[API] GET ${positionsUrl} | params: ${JSON.stringify(positionsParams)}`);
     try {
       const res = await firstValueFrom(
-        this.httpService.get(`${this.appConfig.polymarketDataUrl}/v1/market-positions`, {
-          params: { market: conditionId, limit: 500, sortBy: 'CASH_PNL', sortDirection: 'DESC' },
+        this.httpService.get(positionsUrl, {
+          params: positionsParams,
           timeout: 15_000,
         }),
       );
+      this.logger.log(`[API] GET ${positionsUrl} → status=${res.status} | groups=${Array.isArray(res.data) ? res.data.length : 0}`);
 
       const groups: PolymarketPositionGroup[] = Array.isArray(res.data) ? res.data : [];
 
@@ -175,7 +185,7 @@ export class PolymarketService {
         .filter((p) => p.totalPnl > 0)
         .slice(0, this.appConfig.polymarketWinnerCount);
 
-      this.logger.log(`Top ${side} positions by PNL fetched: ${top.length}`);
+      this.logger.log(`Top ${side} positions by PNL fetched: ${top.length} (of ${group.positions.length} total, filtered positive PNL)`);
 
       return top.map((p) => ({
         walletAddress: p.proxyWallet,
@@ -185,7 +195,7 @@ export class PolymarketService {
         marketQuestion,
       }));
     } catch (err) {
-      this.logger.error('Failed to fetch Polymarket positions', err);
+      this.logger.error(`[API] GET ${positionsUrl} → FAILED`, err);
       return [];
     }
   }
