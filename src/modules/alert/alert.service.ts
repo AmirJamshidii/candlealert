@@ -25,6 +25,9 @@ export class AlertService {
     const { signalKey, interval, candle, snapshotPrice, direction } = event;
 
     try {
+      // Wait 10s after candle close for Polymarket data to settle
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+
       // Fetch Polymarket winners for this signal
       const { holders, positions } = await this.polymarketService.handleSignal(
         signalKey,
