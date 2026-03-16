@@ -45,22 +45,25 @@ export function formatReversalAlert(
   snapshotWindowMs: number = 10000,
   positions: IPosition[] = [],
   direction: ReversalDirection = 'green_to_red',
+  pending = false,
 ): string {
   const snapshotWindowS = snapshotWindowMs / 1000;
   const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
   const eventLink = `https://polymarket.com/event/${eventSlug}`;
   const isGreenToRed = direction === 'green_to_red';
 
-  const winnerLines = winners.length
-    ? winners
-        .map((w, i) => {
-          const label = w.name || abbreviateAddress(w.walletAddress);
-          const shares = Math.round(w.positionSize).toLocaleString('en-US');
-          const link = `https://polymarket.com/profile/${w.walletAddress}`;
-          return `${i + 1}. <a href="${link}">${label}</a> — ${shares} shares`;
-        })
-        .join('\n')
-    : 'No holders data available';
+  const winnerLines = pending
+    ? '⏳ Fetching Polymarket data...'
+    : winners.length
+      ? winners
+          .map((w, i) => {
+            const label = w.name || abbreviateAddress(w.walletAddress);
+            const shares = Math.round(w.positionSize).toLocaleString('en-US');
+            const link = `https://polymarket.com/profile/${w.walletAddress}`;
+            return `${i + 1}. <a href="${link}">${label}</a> — ${shares} shares`;
+          })
+          .join('\n')
+      : 'No holders data available';
 
   const marketQuestion = winners[0]?.marketQuestion ?? 'BTC price market';
   const side = isGreenToRed ? 'Down' : 'Up';

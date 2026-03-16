@@ -73,7 +73,16 @@ export class PolymarketService {
     }
   }
 
-  private async findMarket(interval: string, openTime: number): Promise<{ conditionId: string; question: string }> {
+  async isMarketClosed(interval: string, openTime: number): Promise<boolean> {
+    try {
+      const { closed } = await this.findMarket(interval, openTime);
+      return closed;
+    } catch {
+      return false;
+    }
+  }
+
+  private async findMarket(interval: string, openTime: number): Promise<{ conditionId: string; question: string; closed: boolean }> {
     const slug = `btc-updown-${interval}-${Math.floor(openTime / 1000)}`;
     this.logger.log(`Fetching Polymarket market: ${slug}`);
 
@@ -88,17 +97,19 @@ export class PolymarketService {
       );
       this.logger.log(`[API] GET ${url} → status=${res.status} | events=${Array.isArray(res.data) ? res.data.length : 1}`);
 
-      const events: Array<{ markets?: Array<{ conditionId: string; question: string }> }> =
+      const events: Array<{ markets?: Array<{ conditionId: string; question: string; closed?: boolean; resolved?: boolean; active?: boolean }> }> =
         Array.isArray(res.data) ? res.data : [res.data];
 
       const market = events[0]?.markets?.[0];
-      if (!market?.conditionId) return { conditionId: '', question: '' };
+      if (!market?.conditionId) return { conditionId: '', question: '', closed: false };
 
-      this.logger.log(`conditionId: ${market.conditionId}`);
-      return { conditionId: market.conditionId, question: market.question ?? slug };
+      // Polymarket markets are closed when closed=true or resolved=true or active=false
+      const closed = market.closed === true || market.resolved === true || market.active === false;
+      this.logger.log(`conditionId: ${market.conditionId} | closed=${closed}`);
+      return { conditionId: market.conditionId, question: market.question ?? slug, closed };
     } catch (err) {
       this.logger.error(`[API] GET ${url} → FAILED`, err);
-      return { conditionId: '', question: '' };
+      return { conditionId: '', question: '', closed: false };
     }
   }
 
