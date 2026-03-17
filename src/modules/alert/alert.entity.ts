@@ -18,6 +18,9 @@ export class AlertEntity {
   @Column({ type: 'bigint' })
   candleCloseTime: string;
 
+  @Column({ length: 20, nullable: true })
+  direction: string | null;
+
   @CreateDateColumn()
   sentAt: Date;
 }

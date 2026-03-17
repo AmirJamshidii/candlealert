@@ -146,7 +146,7 @@ export class PolymarketService {
 
       // Store in DB
       await this.winnerRepo.saveAll(
-        top.map((h) => ({
+        top.map((h, i) => ({
           signalKey,
           marketId: conditionId,
           marketQuestion,
@@ -155,6 +155,7 @@ export class PolymarketService {
           outcomeSide,
           candleInterval: interval,
           candleCloseTime: String(closeTime),
+          positionRank: i + 1,
         })),
       );
 

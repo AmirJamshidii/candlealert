@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { AlertModule } from '../alert/alert.module';
 import { PolymarketModule } from '../polymarket/polymarket.module';
+import { ConfigModule } from '../../config/config.module';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 
 @Module({
-  imports: [AlertModule, PolymarketModule],
+  imports: [HttpModule, AlertModule, PolymarketModule, ConfigModule],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
 })

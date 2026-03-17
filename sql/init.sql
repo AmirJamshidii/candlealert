@@ -17,21 +17,26 @@ CREATE TABLE IF NOT EXISTS alerts (
   chat_id           VARCHAR(50)  NOT NULL,
   interval          VARCHAR(10)  NOT NULL,
   candle_close_time BIGINT       NOT NULL,
+  direction         VARCHAR(20),
   sent_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE (signal_key, chat_id)
 );
 
 CREATE TABLE IF NOT EXISTS polymarket_winners (
-  id                 SERIAL PRIMARY KEY,
-  signal_key         VARCHAR(255)   NOT NULL,
-  market_id          VARCHAR(255)   NOT NULL,
-  market_question    TEXT           NOT NULL,
-  wallet_address     VARCHAR(42)    NOT NULL,
-  position_size      NUMERIC(20, 6) NOT NULL,
-  outcome_side       VARCHAR(20)    NOT NULL,
-  candle_interval    VARCHAR(10)    NOT NULL,
-  candle_close_time  BIGINT         NOT NULL,
-  created_at         TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+  id                      SERIAL PRIMARY KEY,
+  signal_key              VARCHAR(255)   NOT NULL,
+  market_id               VARCHAR(255)   NOT NULL,
+  market_question         TEXT           NOT NULL,
+  wallet_address          VARCHAR(42)    NOT NULL,
+  position_size           NUMERIC(20, 6) NOT NULL,
+  outcome_side            VARCHAR(20)    NOT NULL,
+  candle_interval         VARCHAR(10)    NOT NULL,
+  candle_close_time       BIGINT         NOT NULL,
+  position_rank           INT,
+  avg_price               NUMERIC(20, 6),
+  total_pnl               NUMERIC(20, 6),
+  market_resolved_outcome VARCHAR(20),
+  created_at              TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_pw_signal_key     ON polymarket_winners (signal_key);
 CREATE INDEX IF NOT EXISTS idx_pw_wallet_address ON polymarket_winners (wallet_address);

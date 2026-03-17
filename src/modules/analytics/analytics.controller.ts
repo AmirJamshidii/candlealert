@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import {
@@ -27,6 +27,30 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, type: [SignalTimelineDto] })
   getSignalTimeline(@Query('days') days?: string) {
     return this.analyticsService.getSignalTimeline(days ? parseInt(days, 10) : 7);
+  }
+
+  @Get('signals/heatmap')
+  @ApiOperation({ summary: 'Signal count grouped by hour of day (UTC)' })
+  @ApiResponse({ status: 200, schema: { example: [{ hour: 14, count: 12 }] } })
+  getSignalHeatmap() {
+    return this.analyticsService.getSignalHeatmap();
+  }
+
+  @Get('signals/directions')
+  @ApiOperation({ summary: 'Signal count by direction (green_to_red / red_to_green) per interval' })
+  @ApiResponse({ status: 200, schema: { example: [{ interval: '5m', direction: 'green_to_red', count: 42 }] } })
+  getDirectionBreakdown() {
+    return this.analyticsService.getDirectionBreakdown();
+  }
+
+  @Get('signals/:signalKey/candle')
+  @ApiOperation({ summary: 'OHLCV data for a specific signal, fetched on-demand from Binance' })
+  @ApiParam({ name: 'signalKey', example: '5m:1710000000000' })
+  @ApiResponse({ status: 200, schema: { example: { open: 65000, high: 65500, low: 64800, close: 64900, volume: 12.5, bodySize: 100, wickRatio: 0.45 } } })
+  async getCandleForSignal(@Param('signalKey') signalKey: string) {
+    const candle = await this.analyticsService.getCandleForSignal(signalKey);
+    if (!candle) throw new NotFoundException(`No candle data found for signal ${signalKey}`);
+    return candle;
   }
 
   @Get('winners/leaderboard')
@@ -65,6 +89,34 @@ export class AnalyticsController {
       limit ? parseInt(limit, 10) : 20,
       interval,
     );
+  }
+
+  @Get('wallets/leaderboard')
+  @ApiOperation({ summary: 'Top wallets by avg PnL across signals (requires position PnL data)' })
+  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Lookback window in days (default 30)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default 20)' })
+  @ApiQuery({ name: 'minAppearances', required: false, type: Number, description: 'Min signal appearances (default 3)' })
+  @ApiResponse({ status: 200, schema: { example: [{ walletAddress: '0xabc', appearances: 5, avgPnl: 120.5, totalPnl: 602.5 }] } })
+  getWinRateLeaderboard(
+    @Query('days') days?: string,
+    @Query('limit') limit?: string,
+    @Query('minAppearances') minAppearances?: string,
+  ) {
+    return this.analyticsService.getWinRateLeaderboard(
+      days ? parseInt(days, 10) : 30,
+      limit ? parseInt(limit, 10) : 20,
+      minAppearances ? parseInt(minAppearances, 10) : 3,
+    );
+  }
+
+  @Get('wallets/:address/profile')
+  @ApiOperation({ summary: 'Polymarket portfolio profile for a wallet address' })
+  @ApiParam({ name: 'address', example: '0xabc123' })
+  @ApiResponse({ status: 200, schema: { example: { walletAddress: '0xabc', totalPositions: 15, totalCurrentValue: 5200, totalRealizedPnl: 320, btcUpdownPositions: 4, favoriteCategories: [{ category: 'btc', count: 4 }] } } })
+  async getWalletProfile(@Param('address') address: string) {
+    const profile = await this.analyticsService.getWalletProfile(address);
+    if (!profile) throw new NotFoundException(`Could not fetch profile for ${address}`);
+    return profile;
   }
 
   @Get('holders/:walletAddress')

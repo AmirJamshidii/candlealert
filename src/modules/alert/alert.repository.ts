@@ -15,8 +15,8 @@ export class AlertRepository {
     return count > 0;
   }
 
-  async record(signalKey: string, chatId: string, interval: string, candleCloseTime: number): Promise<void> {
-    await this.repo.save({ signalKey, chatId, interval, candleCloseTime: String(candleCloseTime) });
+  async record(signalKey: string, chatId: string, interval: string, candleCloseTime: number, direction?: string): Promise<void> {
+    await this.repo.save({ signalKey, chatId, interval, candleCloseTime: String(candleCloseTime), direction: direction ?? null });
   }
 
   async getRecent(limit = 100): Promise<AlertEntity[]> {
@@ -40,5 +40,23 @@ export class AlertRepository {
       [days],
     );
     return rows;
+  }
+
+  async getHeatmap(): Promise<{ hour: number; count: number }[]> {
+    return this.repo.manager.query(
+      `SELECT EXTRACT(HOUR FROM sent_at AT TIME ZONE 'UTC')::int AS hour, COUNT(*)::int AS count
+       FROM alerts
+       GROUP BY 1
+       ORDER BY 1`,
+    );
+  }
+
+  async getDirectionBreakdown(): Promise<{ interval: string; direction: string; count: number }[]> {
+    return this.repo.manager.query(
+      `SELECT interval, COALESCE(direction, 'unknown') AS direction, COUNT(*)::int AS count
+       FROM alerts
+       GROUP BY interval, direction
+       ORDER BY interval, direction`,
+    );
   }
 }

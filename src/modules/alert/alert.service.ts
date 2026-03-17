@@ -38,7 +38,7 @@ export class AlertService {
           }
           const msgId = await this.telegramService.sendMessage(initialMessage, chatId);
           if (msgId) messageIds.set(chatId, msgId);
-          await this.alertRepo.record(signalKey, chatId, interval, candle.closeTime);
+          await this.alertRepo.record(signalKey, chatId, interval, candle.closeTime, direction);
           this.logger.log(`Alert sent [${chatId}] for ${signalKey}`);
         }),
       );

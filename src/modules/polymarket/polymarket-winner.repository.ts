@@ -77,4 +77,31 @@ export class PolymarketWinnerRepository {
       order: { createdAt: 'DESC' },
     });
   }
+
+  async getWinRateLeaderboard(
+    days: number,
+    limit: number,
+    minAppearances = 3,
+  ): Promise<{ walletAddress: string; appearances: number; avgPnl: number; totalPnl: number }[]> {
+    const rows = await this.repo.manager.query(
+      `SELECT wallet_address AS "walletAddress",
+              COUNT(DISTINCT signal_key)::int AS appearances,
+              AVG(total_pnl::numeric) AS "avgPnl",
+              SUM(total_pnl::numeric) AS "totalPnl"
+       FROM polymarket_winners
+       WHERE created_at >= NOW() - ($1 || ' days')::interval
+         AND total_pnl IS NOT NULL
+       GROUP BY wallet_address
+       HAVING COUNT(DISTINCT signal_key) >= $2
+       ORDER BY AVG(total_pnl::numeric) DESC
+       LIMIT $3`,
+      [days, minAppearances, limit],
+    );
+    return rows.map((r: Record<string, string>) => ({
+      walletAddress: r.walletAddress,
+      appearances: parseInt(r.appearances, 10),
+      avgPnl: parseFloat(r.avgPnl ?? '0'),
+      totalPnl: parseFloat(r.totalPnl ?? '0'),
+    }));
+  }
 }

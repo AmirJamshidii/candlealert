@@ -31,6 +31,18 @@ export class PolymarketWinnerEntity {
   @Column({ type: 'bigint' })
   candleCloseTime: string;
 
+  @Column({ nullable: true })
+  positionRank: number | null;
+
+  @Column({ type: 'numeric', precision: 20, scale: 6, nullable: true })
+  avgPrice: string | null;
+
+  @Column({ type: 'numeric', precision: 20, scale: 6, nullable: true })
+  totalPnl: string | null;
+
+  @Column({ length: 20, nullable: true })
+  marketResolvedOutcome: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }
