@@ -3,13 +3,19 @@
 ## Commands
 
 ```bash
-npm run start:dev       # Watch mode
+# Development (hot-reload, no Docker rebuild)
+npm run dev             # Start postgres in Docker + app in watch mode
+npm run dev:infra:down  # Stop dev postgres
+
+# Production
+npm run docker:up       # Build and run all services (app + postgres)
+npm run docker:down     # Stop services
+
+# Other
 npm run build           # Compile TypeScript
 npm run test            # Unit tests
 npx jest path/to/file   # Single test
 npm run lint            # ESLint auto-fix
-npm run docker:up       # Build and run all services
-npm run docker:down     # Stop services
 ```
 
 ## Architecture
