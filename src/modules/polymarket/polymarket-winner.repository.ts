@@ -28,9 +28,10 @@ export class PolymarketWinnerRepository {
   async getLeaderboard(
     limit: number,
     interval?: string,
-  ): Promise<{ walletAddress: string; totalPosition: number; signalCount: number }[]> {
+  ): Promise<{ walletAddress: string; displayName: string | null; totalPosition: number; signalCount: number }[]> {
     const rows = await this.repo.manager.query(
       `SELECT wallet_address AS "walletAddress",
+              MAX(display_name) AS "displayName",
               SUM(position_size::numeric) AS "totalPosition",
               COUNT(DISTINCT signal_key)::int AS "signalCount"
        FROM polymarket_winners
@@ -42,6 +43,7 @@ export class PolymarketWinnerRepository {
     );
     return rows.map((r: Record<string, string>) => ({
       walletAddress: r.walletAddress,
+      displayName: r.displayName ?? null,
       totalPosition: parseFloat(r.totalPosition),
       signalCount: parseInt(r.signalCount, 10),
     }));
@@ -51,9 +53,10 @@ export class PolymarketWinnerRepository {
     days: number,
     limit: number,
     interval?: string,
-  ): Promise<{ walletAddress: string; signalCount: number; totalPosition: number }[]> {
+  ): Promise<{ walletAddress: string; displayName: string | null; signalCount: number; totalPosition: number }[]> {
     const rows = await this.repo.manager.query(
       `SELECT wallet_address AS "walletAddress",
+              MAX(display_name) AS "displayName",
               COUNT(DISTINCT signal_key)::int AS "signalCount",
               SUM(position_size::numeric) AS "totalPosition"
        FROM polymarket_winners
@@ -66,6 +69,7 @@ export class PolymarketWinnerRepository {
     );
     return rows.map((r: Record<string, string>) => ({
       walletAddress: r.walletAddress,
+      displayName: r.displayName ?? null,
       signalCount: parseInt(r.signalCount, 10),
       totalPosition: parseFloat(r.totalPosition),
     }));
@@ -82,9 +86,10 @@ export class PolymarketWinnerRepository {
     days: number,
     limit: number,
     minAppearances = 3,
-  ): Promise<{ walletAddress: string; appearances: number; avgPnl: number; totalPnl: number }[]> {
+  ): Promise<{ walletAddress: string; displayName: string | null; appearances: number; avgPnl: number; totalPnl: number }[]> {
     const rows = await this.repo.manager.query(
       `SELECT wallet_address AS "walletAddress",
+              MAX(display_name) AS "displayName",
               COUNT(DISTINCT signal_key)::int AS appearances,
               AVG(total_pnl::numeric) AS "avgPnl",
               SUM(total_pnl::numeric) AS "totalPnl"
@@ -99,6 +104,7 @@ export class PolymarketWinnerRepository {
     );
     return rows.map((r: Record<string, string>) => ({
       walletAddress: r.walletAddress,
+      displayName: r.displayName ?? null,
       appearances: parseInt(r.appearances, 10),
       avgPnl: parseFloat(r.avgPnl ?? '0'),
       totalPnl: parseFloat(r.totalPnl ?? '0'),

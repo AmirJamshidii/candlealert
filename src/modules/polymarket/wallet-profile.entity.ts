@@ -5,6 +5,9 @@ export class WalletProfileEntity {
   @PrimaryColumn({ length: 42 })
   walletAddress: string;
 
+  @Column({ length: 100, nullable: true })
+  displayName: string | null;
+
   @Column({ default: 0 })
   totalPositions: number;
 

@@ -143,6 +143,7 @@ export class AnalyticsService {
 
   async getWalletProfile(address: string): Promise<{
     walletAddress: string;
+    displayName: string | null;
     totalPositions: number;
     totalCurrentValue: number;
     totalRealizedPnl: number;
@@ -156,6 +157,7 @@ export class AnalyticsService {
     if (stored) {
       return {
         walletAddress: stored.walletAddress,
+        displayName: stored.displayName ?? null,
         totalPositions: stored.totalPositions,
         totalCurrentValue: parseFloat(stored.totalCurrentValue),
         totalRealizedPnl: parseFloat(stored.totalRealizedPnl),
@@ -189,7 +191,7 @@ export class AnalyticsService {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
 
-      // Persist for future requests
+      // Persist for future requests (name unknown from this path)
       await this.walletProfileRepo.upsert({
         walletAddress: address,
         totalPositions: positions.length,
@@ -202,6 +204,7 @@ export class AnalyticsService {
 
       return {
         walletAddress: address,
+        displayName: null,
         totalPositions: positions.length,
         totalCurrentValue,
         totalRealizedPnl,

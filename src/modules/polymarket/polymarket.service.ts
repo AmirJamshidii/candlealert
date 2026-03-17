@@ -77,10 +77,6 @@ export class PolymarketService {
         this.getTopHolders(conditionId, question, signalKey, interval, closeTime, outcomeIndex, outcomeSide),
         this.getTopPositionsByPnl(conditionId, question, outcomeIndex),
       ]);
-
-      // Fetch and store wallet profiles for top holders in background (non-blocking)
-      void this.fetchAndStoreWalletProfiles(holders.map(h => h.walletAddress));
-
       return { holders, positions };
     } catch (err) {
       this.errorLogService.log(err, { module: 'polymarket' });
@@ -171,7 +167,13 @@ export class PolymarketService {
           candleInterval: interval,
           candleCloseTime: String(closeTime),
           positionRank: i + 1,
+          displayName: h.name || h.pseudonym || null,
         })),
+      );
+
+      // Fetch and store wallet profiles for top holders in background (non-blocking)
+      void this.fetchAndStoreWalletProfiles(
+        top.map(h => ({ walletAddress: h.proxyWallet, name: h.name || h.pseudonym || null })),
       );
 
       return top.map((h) => ({
@@ -186,9 +188,9 @@ export class PolymarketService {
     }
   }
 
-  private async fetchAndStoreWalletProfiles(addresses: string[]): Promise<void> {
+  private async fetchAndStoreWalletProfiles(holders: { walletAddress: string; name: string | null }[]): Promise<void> {
     const profiles = await Promise.all(
-      addresses.map(addr => this.fetchWalletProfile(addr).catch(() => null)),
+      holders.map(h => this.fetchWalletProfile(h.walletAddress, h.name).catch(() => null)),
     );
     const valid = profiles.filter(Boolean);
     if (valid.length) {
@@ -199,8 +201,9 @@ export class PolymarketService {
     }
   }
 
-  private async fetchWalletProfile(address: string): Promise<{
+  private async fetchWalletProfile(address: string, name: string | null = null): Promise<{
     walletAddress: string;
+    displayName: string | null;
     totalPositions: number;
     totalCurrentValue: string;
     totalRealizedPnl: string;
@@ -232,6 +235,7 @@ export class PolymarketService {
 
       return {
         walletAddress: address,
+        displayName: name,
         totalPositions: positions.length,
         totalCurrentValue: String(totalCurrentValue),
         totalRealizedPnl: String(totalRealizedPnl),

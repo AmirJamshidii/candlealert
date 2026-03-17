@@ -31,6 +31,9 @@ export class PolymarketWinnerEntity {
   @Column({ type: 'bigint' })
   candleCloseTime: string;
 
+  @Column({ length: 100, nullable: true })
+  displayName: string | null;
+
   @Column({ nullable: true })
   positionRank: number | null;
 
