@@ -10,5 +10,6 @@ import { AnalyticsService } from './analytics.service';
   imports: [HttpModule, AlertModule, PolymarketModule, ConfigModule],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
+  // WalletProfileRepository is exported from PolymarketModule and injected via AnalyticsService
 })
 export class AnalyticsModule {}

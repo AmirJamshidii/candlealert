@@ -41,6 +41,17 @@ CREATE TABLE IF NOT EXISTS polymarket_winners (
 CREATE INDEX IF NOT EXISTS idx_pw_signal_key     ON polymarket_winners (signal_key);
 CREATE INDEX IF NOT EXISTS idx_pw_wallet_address ON polymarket_winners (wallet_address);
 
+CREATE TABLE IF NOT EXISTS wallet_profiles (
+  wallet_address          VARCHAR(42)    PRIMARY KEY,
+  total_positions         INT            NOT NULL DEFAULT 0,
+  total_current_value     NUMERIC(20, 6) NOT NULL DEFAULT 0,
+  total_realized_pnl      NUMERIC(20, 6) NOT NULL DEFAULT 0,
+  total_cash_pnl          NUMERIC(20, 6) NOT NULL DEFAULT 0,
+  btc_updown_positions    INT            NOT NULL DEFAULT 0,
+  favorite_categories     JSONB          NOT NULL DEFAULT '[]',
+  fetched_at              TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS migrations (
   id         SERIAL PRIMARY KEY,
   timestamp  BIGINT       NOT NULL,

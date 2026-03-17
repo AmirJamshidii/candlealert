@@ -9,8 +9,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
 
-  <!-- Grid.js (no theme — fully custom) -->
-
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; font-family: 'Roboto', sans-serif; font-size: 14px; }
@@ -122,7 +120,7 @@
 
     /* ── Stat Cards ── */
     .stat-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
     }
     .stat-card {
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -138,6 +136,8 @@
     .stat-number.green { color: var(--green); }
     .stat-number.blue  { color: var(--primary); }
     .stat-number.teal  { color: var(--teal); }
+    .stat-number.yellow { color: var(--yellow); }
+    .stat-sub { font-size: 13px; color: var(--text2); margin-top: 6px; }
     .intervals-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .chip {
       display: inline-block; background: var(--surface2); color: var(--on-primary);
@@ -156,8 +156,18 @@
       display: flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.05em;
     }
     .chart-card-header .material-icons { font-size: 18px; }
+    .chart-card-header-right { margin-left: auto; display: flex; gap: 4px; }
     .chart-card-body { padding: 20px; }
     .chart-card-body.center { display: flex; align-items: center; justify-content: center; min-height: 230px; }
+
+    /* ── Range tabs ── */
+    .range-tab {
+      padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;
+      cursor: pointer; color: var(--text2); background: transparent;
+      border: 1px solid var(--border); transition: all 0.15s;
+    }
+    .range-tab:hover { background: var(--surface2); color: var(--text); }
+    .range-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
     /* ── Section header ── */
     .section-header { margin-bottom: 20px; }
@@ -169,153 +179,96 @@
       background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
     }
 
-    /* ── Grid.js — full custom dark theme (no mermaid base) ── */
+    /* ── Grid.js — full custom dark theme ── */
     .gridjs-container {
       color: var(--text);
       font-family: 'Roboto', sans-serif;
       padding: 16px 20px;
       width: 100%;
     }
-    .gridjs-wrapper {
-      border: none;
-      border-radius: 0;
-      box-shadow: none;
-      overflow-x: auto;
-    }
-
-    /* Search */
+    .gridjs-wrapper { border: none; border-radius: 0; box-shadow: none; overflow-x: auto; }
     .gridjs-head { margin-bottom: 14px; overflow: hidden; }
     .gridjs-search { float: right; }
     .gridjs-search-input {
-      background: var(--surface2);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 7px 12px;
-      font-family: 'Roboto', sans-serif;
-      font-size: 13px;
-      outline: none;
-      transition: border-color 0.15s;
-      width: 220px;
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 12px; font-family: 'Roboto', sans-serif;
+      font-size: 13px; outline: none; transition: border-color 0.15s; width: 220px;
     }
     .gridjs-search-input:focus { border-color: var(--primary); }
     .gridjs-search-input::placeholder { color: var(--text3); }
-
-    /* Table */
-    .gridjs-table {
-      border-collapse: collapse;
-      width: 100%;
-      table-layout: auto;
-    }
-
-    /* Header */
+    .gridjs-table { border-collapse: collapse; width: 100%; table-layout: auto; }
     .gridjs-th {
-      background: var(--surface2);
-      color: var(--text2);
-      font-family: 'Roboto', sans-serif;
-      font-size: 11px;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      padding: 10px 14px;
-      border: none;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-      user-select: none;
+      background: var(--surface2); color: var(--text2); font-family: 'Roboto', sans-serif;
+      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em;
+      padding: 10px 14px; border: none; border-bottom: 1px solid var(--border);
+      white-space: nowrap; user-select: none;
     }
-    .gridjs-th-content {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      float: none;
-      width: auto;
-    }
+    .gridjs-th-content { display: flex; align-items: center; gap: 4px; float: none; width: auto; }
     .gridjs-th.gridjs-th-sort { cursor: pointer; }
     .gridjs-th.gridjs-th-sort:hover { background: #323232; }
-    /* hide default sort button */
     .gridjs-th button.gridjs-sort { display: none; }
     .gridjs-th-sort .gridjs-th-content::after { content: ' ↕'; font-size: 10px; color: var(--text3); }
     .gridjs-th-sort-asc .gridjs-th-content::after { content: ' ↑'; color: var(--primary); }
     .gridjs-th-sort-desc .gridjs-th-content::after { content: ' ↓'; color: var(--primary); }
-
-    /* Body */
     .gridjs-tbody { background: transparent; }
     .gridjs-tr { border-bottom: 1px solid var(--border); }
     .gridjs-tbody .gridjs-tr:last-child { border-bottom: none; }
     .gridjs-tbody .gridjs-tr:hover .gridjs-td { background: var(--surface2); }
-    .gridjs-td {
-      background: transparent;
-      color: var(--text);
-      font-family: 'Roboto', sans-serif;
-      font-size: 14px;
-      padding: 13px 14px;
-      border: none;
-    }
-
-    /* Footer */
-    .gridjs-footer {
-      background: transparent;
-      border-top: 1px solid var(--border);
-      border-bottom: none;
-      padding: 10px 0 4px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .gridjs-summary {
-      color: var(--text2);
-      font-family: 'Roboto', sans-serif;
-      font-size: 12px;
-    }
+    .gridjs-td { background: transparent; color: var(--text); font-family: 'Roboto', sans-serif; font-size: 14px; padding: 13px 14px; border: none; }
+    .gridjs-footer { background: transparent; border-top: 1px solid var(--border); border-bottom: none; padding: 10px 0 4px; display: flex; align-items: center; justify-content: space-between; }
+    .gridjs-summary { color: var(--text2); font-family: 'Roboto', sans-serif; font-size: 12px; }
     .gridjs-pagination { display: flex; align-items: center; gap: 2px; }
     .gridjs-pagination .gridjs-pages { display: flex; gap: 2px; }
-    .gridjs-pagination button {
-      background: transparent;
-      border: none;
-      border-radius: 6px;
-      color: var(--text2);
-      font-family: 'Roboto', sans-serif;
-      font-size: 13px;
-      min-width: 32px;
-      height: 32px;
-      padding: 0 8px;
-      cursor: pointer;
-      transition: background 0.15s, color 0.15s;
-    }
-    .gridjs-pagination button:hover:not([disabled]):not(.gridjs-currentPage) {
-      background: var(--surface2);
-      color: var(--text);
-    }
-    .gridjs-pagination button.gridjs-currentPage {
-      background: var(--primary);
-      color: #fff;
-      font-weight: 500;
-    }
-    .gridjs-pagination button[disabled] {
-      color: var(--text3);
-      cursor: default;
-    }
-    /* select (page size if enabled) */
-    .gridjs-pagination select {
-      background: var(--surface2);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-family: 'Roboto', sans-serif;
-      font-size: 13px;
-    }
+    .gridjs-pagination button { background: transparent; border: none; border-radius: 6px; color: var(--text2); font-family: 'Roboto', sans-serif; font-size: 13px; min-width: 32px; height: 32px; padding: 0 8px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+    .gridjs-pagination button:hover:not([disabled]):not(.gridjs-currentPage) { background: var(--surface2); color: var(--text); }
+    .gridjs-pagination button.gridjs-currentPage { background: var(--primary); color: #fff; font-weight: 500; }
+    .gridjs-pagination button[disabled] { color: var(--text3); cursor: default; }
+    .gridjs-pagination select { background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font-family: 'Roboto', sans-serif; font-size: 13px; }
+    .gridjs-notfound td, .gridjs-loading td { background: transparent; color: var(--text2); font-family: 'Roboto', sans-serif; font-size: 13px; text-align: center; padding: 32px; border: none; }
 
-    /* Empty / loading */
-    .gridjs-notfound td, .gridjs-loading td {
-      background: transparent;
-      color: var(--text2);
-      font-family: 'Roboto', sans-serif;
-      font-size: 13px;
-      text-align: center;
-      padding: 32px;
-      border: none;
+    /* ── Custom table (for expandable rows) ── */
+    .ctable-wrap { padding: 0 20px 20px; overflow-x: auto; }
+    .ctable { border-collapse: collapse; width: 100%; }
+    .ctable thead th {
+      background: var(--surface2); color: var(--text2);
+      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.07em;
+      padding: 10px 14px; border: none; border-bottom: 1px solid var(--border); white-space: nowrap;
     }
+    .ctable tbody tr { border-bottom: 1px solid var(--border); }
+    .ctable tbody tr:last-child { border-bottom: none; }
+    .ctable tbody tr:hover td { background: var(--surface2); }
+    .ctable tbody td { background: transparent; color: var(--text); font-size: 14px; padding: 13px 14px; border: none; }
+    .ctable tbody tr.expand-row td { padding: 0; background: var(--bg); }
+    .ctable tbody tr.expand-row:hover td { background: var(--bg); }
+
+    /* ── Expand profile card ── */
+    .profile-card {
+      margin: 12px 14px; padding: 16px 20px;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;
+    }
+    .profile-stat { display: flex; flex-direction: column; gap: 4px; }
+    .profile-stat-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
+    .profile-stat-value { font-size: 16px; font-weight: 400; color: var(--text); }
+    .profile-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+    .profile-loading { color: var(--text2); font-size: 13px; padding: 12px 14px; }
+
+    /* ── Expand winners mini-table ── */
+    .winners-expand { margin: 8px 14px 12px; }
+    .winners-expand table { border-collapse: collapse; width: 100%; }
+    .winners-expand th { font-size: 11px; color: var(--text2); font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+    .winners-expand td { font-size: 13px; color: var(--text); padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    .winners-expand tr:last-child td { border-bottom: none; }
+
+    /* ── Expand toggle button ── */
+    .expand-btn {
+      background: none; border: none; cursor: pointer; color: var(--on-primary);
+      font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 6px; transition: background 0.15s;
+    }
+    .expand-btn:hover { background: var(--primary-bg); }
+    .expand-btn .material-icons { font-size: 16px; transition: transform 0.2s; }
+    .expand-btn.open .material-icons { transform: rotate(180deg); }
 
     /* ── Inline badges ── */
     .badge-interval {
@@ -327,6 +280,16 @@
       display: inline-block; background: #3b1515; color: #f28b82;
       border-radius: 6px; padding: 2px 9px; font-size: 12px; font-weight: 500;
     }
+    .badge-dir-red  { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--red); }
+    .badge-dir-green { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--green); }
+
+    .pnl-pos { color: var(--green); font-weight: 500; }
+    .pnl-neg { color: var(--red); font-weight: 500; }
+    .rank-badge { color: var(--text2); font-weight: 500; font-size: 13px; }
+
+    /* ── Empty state ── */
+    .empty-state { padding: 40px; text-align: center; color: var(--text2); font-size: 14px; }
+    .empty-state .material-icons { font-size: 40px; display: block; margin-bottom: 12px; color: var(--text3); }
 
     a { color: var(--on-primary); text-decoration: none; }
     a:hover { color: #8ab4f8; text-decoration: underline; }
@@ -348,8 +311,14 @@
     <div class="nav-item active" data-section="overview">
       <span class="material-icons">dashboard</span> Overview
     </div>
+    <div class="nav-item" data-section="signals">
+      <span class="material-icons">candlestick_chart</span> Signals
+    </div>
     <div class="nav-item" data-section="leaderboard">
       <span class="material-icons">leaderboard</span> Wallet Leaderboard
+    </div>
+    <div class="nav-item" data-section="pnl">
+      <span class="material-icons">military_tech</span> PnL Leaderboard
     </div>
     <div class="nav-item" data-section="alerts">
       <span class="material-icons">notifications</span> Recent Alerts
@@ -399,13 +368,23 @@
           <div class="stat-label"><span class="material-icons" style="color:var(--teal)">account_balance_wallet</span> Tracked Wallets (30d)</div>
           <div class="stat-number teal" id="trackedWallets">—</div>
         </div>
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--yellow)">access_time</span> Last Signal</div>
+          <div class="stat-number yellow" id="lastSignalTime" style="font-size:22px;line-height:1.3">—</div>
+          <div class="stat-sub" id="lastSignalInterval"></div>
+        </div>
       </div>
 
       <div class="charts-grid">
         <div class="chart-card">
           <div class="chart-card-header">
             <span class="material-icons" style="color:var(--primary)">trending_up</span>
-            Signal Timeline — last 30 days
+            Signal Timeline
+            <div class="chart-card-header-right">
+              <button class="range-tab" data-days="7" onclick="setTimelineRange(7)">7d</button>
+              <button class="range-tab" data-days="14" onclick="setTimelineRange(14)">14d</button>
+              <button class="range-tab active" data-days="30" onclick="setTimelineRange(30)">30d</button>
+            </div>
           </div>
           <div class="chart-card-body"><canvas id="timelineChart" height="100"></canvas></div>
         </div>
@@ -419,14 +398,87 @@
       </div>
     </section>
 
+    <!-- ── SIGNALS ── -->
+    <section class="section" id="signals">
+      <div class="section-header">
+        <div class="section-title">Signals</div>
+        <div class="section-sub">All recent reversal signals — click View to see Polymarket top holders</div>
+      </div>
+      <div class="table-card">
+        <div class="ctable-wrap" style="padding-top:16px">
+          <table class="ctable" id="signalsTable">
+            <thead>
+              <tr>
+                <th>Time (UTC)</th>
+                <th>Interval</th>
+                <th>Direction</th>
+                <th>Signal Key</th>
+                <th>Winners</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="signalsTbody"></tbody>
+          </table>
+          <div id="signalsEmpty" class="empty-state" style="display:none">
+            <span class="material-icons">candlestick_chart</span>
+            No signals recorded yet.
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── LEADERBOARD ── -->
     <section class="section" id="leaderboard">
       <div class="section-header">
         <div class="section-title">Wallet Leaderboard</div>
-        <div class="section-sub">Top recurring down holders — last 30 days</div>
+        <div class="section-sub">Top recurring down holders — last 30 days. Click a wallet to expand portfolio.</div>
       </div>
       <div class="table-card">
-        <div id="tblLeaderboard"></div>
+        <div class="ctable-wrap" style="padding-top:16px">
+          <table class="ctable" id="leaderboardTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Wallet</th>
+                <th>Signals</th>
+                <th>Total Shares</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardTbody"></tbody>
+          </table>
+          <div id="leaderboardEmpty" class="empty-state" style="display:none">
+            <span class="material-icons">account_balance_wallet</span>
+            No wallet data yet.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PNL LEADERBOARD ── -->
+    <section class="section" id="pnl">
+      <div class="section-header">
+        <div class="section-title">PnL Leaderboard</div>
+        <div class="section-sub">Wallets ranked by average PnL per signal (30d, min 3 appearances). Only populated for signals after the analytics upgrade.</div>
+      </div>
+      <div class="table-card">
+        <div class="ctable-wrap" style="padding-top:16px">
+          <table class="ctable" id="pnlTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Wallet</th>
+                <th>Appearances</th>
+                <th>Avg PnL</th>
+                <th>Total PnL</th>
+              </tr>
+            </thead>
+            <tbody id="pnlTbody"></tbody>
+          </table>
+          <div id="pnlEmpty" class="empty-state" style="display:none">
+            <span class="material-icons">military_tech</span>
+            No PnL data yet — this populates after new signals fire.
+          </div>
+        </div>
       </div>
     </section>
 
@@ -472,10 +524,24 @@
 
 <script>
 const COLORS = ['#1a73e8','#34a853','#fbbc04','#ea4335','#8957e5','#00bcd4'];
-const TITLES = { overview: 'Overview', leaderboard: 'Wallet Leaderboard', alerts: 'Recent Alerts', winners: 'Recent Winners', errors: 'Error Log' };
+const TITLES = {
+  overview: 'Overview',
+  signals: 'Signals',
+  leaderboard: 'Wallet Leaderboard',
+  pnl: 'PnL Leaderboard',
+  alerts: 'Recent Alerts',
+  winners: 'Recent Winners',
+  errors: 'Error Log',
+};
 
 let timelineChart, intervalChart;
+let timelineDays = 30;
 const grids = {};
+
+// ── State for expand rows ──
+const profileCache = new Map();   // address → profile data
+const winnersCache = new Map();   // signalKey → winners array
+const expandState = new Map();    // rowId → open boolean
 
 // ── Sidebar navigation ──
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -491,11 +557,42 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
 // ── Helpers ──
 function abbrev(a) { return (!a || a.length <= 12) ? a : a.slice(0,6)+'...'+a.slice(-4); }
-function profileLink(a) { return gridjs.html(`<a href="https://polymarket.com/profile/${a}" target="_blank" rel="noopener">${abbrev(a)}</a>`); }
+function polyLink(a) { return `https://polymarket.com/profile/${a}`; }
+function profileLink(a) { return gridjs.html(`<a href="${polyLink(a)}" target="_blank" rel="noopener">${abbrev(a)}</a>`); }
 function fmtTime(ts) { return new Date(ts).toUTCString().replace(' GMT',' UTC'); }
 function fmtNum(n) { return parseFloat(n).toLocaleString('en-US', { maximumFractionDigits: 0 }); }
+function fmtMoney(n) {
+  const v = parseFloat(n);
+  return (v >= 0 ? '+' : '') + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtRelTime(ts) {
+  const diff = Date.now() - Number(ts);
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return m <= 1 ? 'just now' : `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 function badgeInterval(v) { return gridjs.html(`<span class="badge-interval">${v}</span>`); }
 function badgeError(v) { return gridjs.html(`<span class="badge-error">${v}</span>`); }
+function badgeDirection(d) {
+  if (!d) return gridjs.html('<span style="color:var(--text3)">—</span>');
+  if (d === 'green_to_red') return gridjs.html('<span class="badge-dir-red">🔴 G→R</span>');
+  if (d === 'red_to_green') return gridjs.html('<span class="badge-dir-green">🟢 R→G</span>');
+  return gridjs.html(`<span style="color:var(--text3)">${d}</span>`);
+}
+function dirBadgeHtml(d) {
+  if (!d) return '<span style="color:var(--text3)">—</span>';
+  if (d === 'green_to_red') return '<span class="badge-dir-red">🔴 G→R</span>';
+  if (d === 'red_to_green') return '<span class="badge-dir-green">🟢 R→G</span>';
+  return `<span style="color:var(--text3)">${d}</span>`;
+}
+function intervalBadgeHtml(v) { return `<span class="badge-interval">${v}</span>`; }
+function pnlHtml(v) {
+  const n = parseFloat(v);
+  if (isNaN(n)) return '<span style="color:var(--text3)">—</span>';
+  return `<span class="${n >= 0 ? 'pnl-pos' : 'pnl-neg'}">${fmtMoney(n)}</span>`;
+}
 
 function makeGrid(containerId, columns, data) {
   if (grids[containerId]) {
@@ -520,6 +617,15 @@ function makeGrid(containerId, columns, data) {
 
 async function fetchJSON(url) {
   try { const r = await fetch(url); return r.ok ? r.json() : null; } catch { return null; }
+}
+
+// ── Timeline range picker ──
+function setTimelineRange(days) {
+  timelineDays = days;
+  document.querySelectorAll('.range-tab').forEach(t => {
+    t.classList.toggle('active', Number(t.dataset.days) === days);
+  });
+  void loadTimeline();
 }
 
 // ── Loaders ──
@@ -557,7 +663,7 @@ async function loadSummary() {
 }
 
 async function loadTimeline() {
-  const d = await fetchJSON('/api/analytics/signals/timeline?days=30');
+  const d = await fetchJSON(`/api/analytics/signals/timeline?days=${timelineDays}`);
   if (!d) return;
   if (timelineChart) timelineChart.destroy();
   timelineChart = new Chart(document.getElementById('timelineChart'), {
@@ -578,34 +684,270 @@ async function loadTimeline() {
   });
 }
 
-async function loadLeaderboard() {
-  const d = await fetchJSON('/api/analytics/holders/leaderboard?days=30&limit=20');
-  if (!d) return;
-  document.getElementById('trackedWallets').textContent = d.length;
-  makeGrid('tblLeaderboard',
-    ['#', { name: 'Wallet', sort: false }, 'Signals', 'Total Shares'],
-    d.map((r, i) => [i + 1, profileLink(r.walletAddress), r.signalCount, fmtNum(r.totalPosition)])
-  );
+async function loadLastSignal() {
+  const d = await fetchJSON('/api/alerts?limit=1');
+  const el = document.getElementById('lastSignalTime');
+  const sub = document.getElementById('lastSignalInterval');
+  if (!d || !d[0]) { el.textContent = '—'; return; }
+  const r = d[0];
+  el.textContent = fmtRelTime(r.sentAt ? new Date(r.sentAt).getTime() : Number(r.candleCloseTime));
+  sub.innerHTML = intervalBadgeHtml(r.interval) + (r.direction ? ' &nbsp;' + dirBadgeHtml(r.direction) : '');
 }
 
+// ── Custom table render helpers ──
+function renderCustomTable(tbodyId, emptyId, rows) {
+  const tbody = document.getElementById(tbodyId);
+  const emptyEl = document.getElementById(emptyId);
+  if (!rows || !rows.length) {
+    tbody.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = '';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  tbody.innerHTML = rows.join('');
+}
+
+// ── Profile expand ──
+async function toggleProfileExpand(address, btnEl) {
+  const tr = btnEl.closest('tr');
+  const expandId = `profile-expand-${address.replace(/[^a-z0-9]/gi, '')}`;
+  const existing = document.getElementById(expandId);
+
+  if (existing) {
+    btnEl.classList.toggle('open');
+    existing.style.display = existing.style.display === 'none' ? '' : 'none';
+    return;
+  }
+
+  btnEl.classList.add('open');
+
+  // Insert placeholder row
+  const placeholderTr = document.createElement('tr');
+  placeholderTr.id = expandId;
+  placeholderTr.className = 'expand-row';
+  placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading">Loading profile…</div></td>`;
+  tr.after(placeholderTr);
+
+  // Fetch (with cache)
+  if (!profileCache.has(address)) {
+    const data = await fetchJSON(`/api/analytics/wallets/${address}/profile`);
+    profileCache.set(address, data);
+  }
+  const p = profileCache.get(address);
+
+  if (!p) {
+    placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading" style="color:var(--red)">Could not load profile.</div></td>`;
+    return;
+  }
+
+  const cats = (p.favoriteCategories || []).map(c => `<span class="chip" style="font-size:12px;padding:2px 10px">${c.category} <span style="color:var(--text3)">${c.count}</span></span>`).join('');
+
+  placeholderTr.innerHTML = `<td colspan="99">
+    <div class="profile-card">
+      <div class="profile-stat">
+        <span class="profile-stat-label">Portfolio Value</span>
+        <span class="profile-stat-value">$${parseFloat(p.totalCurrentValue||0).toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+      </div>
+      <div class="profile-stat">
+        <span class="profile-stat-label">Realized PnL</span>
+        <span class="profile-stat-value ${parseFloat(p.totalRealizedPnl||0)>=0?'pnl-pos':'pnl-neg'}">${fmtMoney(p.totalRealizedPnl||0)}</span>
+      </div>
+      <div class="profile-stat">
+        <span class="profile-stat-label">Unrealized PnL</span>
+        <span class="profile-stat-value ${parseFloat(p.totalCashPnl||0)>=0?'pnl-pos':'pnl-neg'}">${fmtMoney(p.totalCashPnl||0)}</span>
+      </div>
+      <div class="profile-stat">
+        <span class="profile-stat-label">Total Positions</span>
+        <span class="profile-stat-value">${p.totalPositions||0}</span>
+      </div>
+      <div class="profile-stat">
+        <span class="profile-stat-label">BTC-Updown Trades</span>
+        <span class="profile-stat-value" style="color:var(--primary)">${p.btcUpdownPositions||0}</span>
+      </div>
+      ${cats ? `<div class="profile-stat" style="flex-basis:100%">
+        <span class="profile-stat-label" style="margin-bottom:6px">Favorite Categories</span>
+        <div class="profile-cats">${cats}</div>
+      </div>` : ''}
+    </div>
+  </td>`;
+}
+
+// ── Signal winners expand ──
+async function toggleSignalWinners(signalKey, btnEl) {
+  const tr = btnEl.closest('tr');
+  const safeKey = signalKey.replace(/[^a-z0-9]/gi, '');
+  const expandId = `winners-expand-${safeKey}`;
+  const existing = document.getElementById(expandId);
+
+  if (existing) {
+    btnEl.classList.toggle('open');
+    existing.style.display = existing.style.display === 'none' ? '' : 'none';
+    return;
+  }
+
+  btnEl.classList.add('open');
+
+  const placeholderTr = document.createElement('tr');
+  placeholderTr.id = expandId;
+  placeholderTr.className = 'expand-row';
+  placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading">Loading winners…</div></td>`;
+  tr.after(placeholderTr);
+
+  if (!winnersCache.has(signalKey)) {
+    const data = await fetchJSON(`/api/analytics/winners/by-signal/${encodeURIComponent(signalKey)}`);
+    winnersCache.set(signalKey, data || []);
+  }
+  const winners = winnersCache.get(signalKey);
+
+  if (!winners.length) {
+    placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading" style="color:var(--text3)">No winners recorded for this signal.</div></td>`;
+    return;
+  }
+
+  const rows = winners.map(w => `<tr>
+    <td><span class="rank-badge">${w.positionRank ? '#' + w.positionRank : '—'}</span></td>
+    <td><a href="${polyLink(w.walletAddress)}" target="_blank" rel="noopener">${abbrev(w.walletAddress)}</a></td>
+    <td>${fmtNum(w.positionSize)}</td>
+  </tr>`).join('');
+
+  placeholderTr.innerHTML = `<td colspan="99">
+    <div class="winners-expand">
+      <table>
+        <thead><tr><th>Rank</th><th>Wallet</th><th>Shares</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </td>`;
+}
+
+// ── Leaderboard (custom table with expand) ──
+async function loadLeaderboard() {
+  const d = await fetchJSON('/api/analytics/holders/leaderboard?days=30&limit=50');
+  if (!d) return;
+  document.getElementById('trackedWallets').textContent = d.length;
+
+  const rows = d.map((r, i) => {
+    const addr = r.walletAddress;
+    const safeAddr = addr.replace(/[^a-z0-9]/gi, '');
+    return `<tr>
+      <td style="color:var(--text2);font-size:13px">${i + 1}</td>
+      <td>
+        <button class="expand-btn" id="lb-btn-${safeAddr}" onclick="toggleProfileExpand('${addr}', this)" title="View Polymarket portfolio">
+          <span class="material-icons">expand_more</span>${abbrev(addr)}
+        </button>
+        <a href="${polyLink(addr)}" target="_blank" rel="noopener" style="margin-left:6px;font-size:12px;color:var(--text3)">↗</a>
+      </td>
+      <td>${r.signalCount}</td>
+      <td>${fmtNum(r.totalPosition)}</td>
+    </tr>`;
+  });
+
+  renderCustomTable('leaderboardTbody', 'leaderboardEmpty', rows);
+}
+
+// ── PnL Leaderboard (custom table with expand) ──
+async function loadPnlLeaderboard() {
+  const d = await fetchJSON('/api/analytics/wallets/leaderboard?days=30&limit=20&minAppearances=3');
+  if (!d) return;
+
+  const rows = d.map((r, i) => {
+    const addr = r.walletAddress;
+    return `<tr>
+      <td style="color:var(--text2);font-size:13px">${i + 1}</td>
+      <td>
+        <button class="expand-btn" onclick="toggleProfileExpand('${addr}', this)" title="View Polymarket portfolio">
+          <span class="material-icons">expand_more</span>${abbrev(addr)}
+        </button>
+        <a href="${polyLink(addr)}" target="_blank" rel="noopener" style="margin-left:6px;font-size:12px;color:var(--text3)">↗</a>
+      </td>
+      <td>${r.appearances}</td>
+      <td>${pnlHtml(r.avgPnl)}</td>
+      <td>${pnlHtml(r.totalPnl)}</td>
+    </tr>`;
+  });
+
+  renderCustomTable('pnlTbody', 'pnlEmpty', rows);
+}
+
+// ── Signals page (custom table with expand) ──
+async function loadSignals() {
+  const d = await fetchJSON('/api/alerts?limit=200');
+  if (!d) return;
+
+  // Deduplicate by signalKey (keep first occurrence per key)
+  const seen = new Set();
+  const unique = d.filter(r => {
+    if (seen.has(r.signalKey)) return false;
+    seen.add(r.signalKey);
+    return true;
+  });
+
+  const rows = unique.map(r => {
+    const safeKey = r.signalKey.replace(/[^a-z0-9]/gi, '');
+    const ts = r.sentAt ? new Date(r.sentAt).getTime() : Number(r.candleCloseTime);
+    return `<tr>
+      <td style="font-size:13px;color:var(--text2)">${fmtTime(ts)}</td>
+      <td>${intervalBadgeHtml(r.interval)}</td>
+      <td>${dirBadgeHtml(r.direction)}</td>
+      <td style="font-family:monospace;font-size:12px;color:var(--text2)">${r.signalKey}</td>
+      <td id="wcount-${safeKey}" style="color:var(--text3)">—</td>
+      <td>
+        <button class="expand-btn" id="sig-btn-${safeKey}" onclick="toggleSignalWinners('${r.signalKey}', this)">
+          <span class="material-icons">expand_more</span>View
+        </button>
+      </td>
+    </tr>`;
+  });
+
+  renderCustomTable('signalsTbody', 'signalsEmpty', rows);
+
+  // Load winner counts lazily for the visible page (first 20)
+  unique.slice(0, 20).forEach(async r => {
+    const safeKey = r.signalKey.replace(/[^a-z0-9]/gi, '');
+    const cell = document.getElementById(`wcount-${safeKey}`);
+    if (!cell) return;
+    const winners = await fetchJSON(`/api/analytics/winners/by-signal/${encodeURIComponent(r.signalKey)}`);
+    if (winners && cell) {
+      winnersCache.set(r.signalKey, winners);
+      cell.textContent = winners.length || '—';
+      if (winners.length) cell.style.color = 'var(--on-primary)';
+    }
+  });
+}
+
+// ── Recent Alerts (Grid.js) ──
 async function loadAlerts() {
   const d = await fetchJSON('/api/alerts?limit=50');
   if (!d) return;
   makeGrid('tblAlerts',
-    ['Time (UTC)', 'Interval', 'Signal Key', 'Chat ID'],
-    d.map(r => [fmtTime(Number(r.candleCloseTime)), badgeInterval(r.interval), r.signalKey, r.chatId])
+    ['Time (UTC)', 'Interval', 'Direction', 'Signal Key', 'Chat ID'],
+    d.map(r => [
+      fmtTime(Number(r.candleCloseTime)),
+      badgeInterval(r.interval),
+      badgeDirection(r.direction),
+      r.signalKey,
+      r.chatId,
+    ])
   );
 }
 
+// ── Recent Winners (Grid.js) ──
 async function loadWinners() {
   const d = await fetchJSON('/api/winners?limit=100');
   if (!d) return;
   makeGrid('tblWinners',
-    ['Time (UTC)', 'Interval', { name: 'Wallet', sort: false }, 'Shares'],
-    d.map(r => [fmtTime(new Date(r.createdAt)), badgeInterval(r.candleInterval), profileLink(r.walletAddress), fmtNum(r.positionSize)])
+    ['Time (UTC)', 'Interval', 'Rank', { name: 'Wallet', sort: false }, 'Shares'],
+    d.map(r => [
+      fmtTime(new Date(r.createdAt)),
+      badgeInterval(r.candleInterval),
+      r.positionRank ? gridjs.html(`<span class="rank-badge">#${r.positionRank}</span>`) : gridjs.html('<span style="color:var(--text3)">—</span>'),
+      profileLink(r.walletAddress),
+      fmtNum(r.positionSize),
+    ])
   );
 }
 
+// ── Errors (Grid.js) ──
 async function loadErrors() {
   const d = await fetchJSON('/api/analytics/errors');
   if (!d) return;
@@ -613,18 +955,34 @@ async function loadErrors() {
     ['Time (UTC)', { name: 'Module', sort: false }, { name: 'Message', sort: false }],
     d.map(r => [
       fmtTime(new Date(r.createdAt)),
-      r.module ? badgeError(r.module) : '—',
+      r.module ? badgeError(r.module) : gridjs.html('—'),
       gridjs.html(`<span title="${(r.message||'').replace(/"/g,'&quot;')}">${(r.message||'').slice(0,120)}${(r.message||'').length>120?'…':''}</span>`),
     ])
   );
 }
 
 async function loadAll() {
-  await Promise.all([loadHealth(), loadConfig(), loadSummary(), loadTimeline(), loadLeaderboard(), loadAlerts(), loadWinners(), loadErrors()]);
+  await Promise.all([
+    loadHealth(),
+    loadConfig(),
+    loadSummary(),
+    loadTimeline(),
+    loadLastSignal(),
+    loadLeaderboard(),
+    loadPnlLeaderboard(),
+    loadSignals(),
+    loadAlerts(),
+    loadWinners(),
+    loadErrors(),
+  ]);
 }
 
 let timer = 60;
-setInterval(() => { timer--; document.getElementById('countdown').textContent = timer; if (timer <= 0) { timer = 60; loadAll(); } }, 1000);
+setInterval(() => {
+  timer--;
+  document.getElementById('countdown').textContent = timer;
+  if (timer <= 0) { timer = 60; loadAll(); }
+}, 1000);
 
 loadAll();
 </script>

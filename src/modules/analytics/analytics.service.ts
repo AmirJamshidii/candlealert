@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AlertRepository } from '../alert/alert.repository';
 import { PolymarketWinnerRepository } from '../polymarket/polymarket-winner.repository';
+import { WalletProfileRepository } from '../polymarket/wallet-profile.repository';
 import { ErrorLogService } from '../error-log/error-log.service';
 import { PolymarketWinnerEntity } from '../polymarket/polymarket-winner.entity';
 import { AppConfig } from '../../config/app.config';
@@ -32,6 +33,7 @@ export class AnalyticsService {
   constructor(
     private readonly alertRepo: AlertRepository,
     private readonly winnerRepo: PolymarketWinnerRepository,
+    private readonly walletProfileRepo: WalletProfileRepository,
     private readonly errorLogService: ErrorLogService,
     private readonly httpService: HttpService,
     private readonly appConfig: AppConfig,
@@ -147,36 +149,36 @@ export class AnalyticsService {
     totalCashPnl: number;
     btcUpdownPositions: number;
     favoriteCategories: { category: string; count: number }[];
+    fetchedAt?: Date;
   } | null> {
-    const url = `${this.appConfig.polymarketDataUrl}/positions`;
+    // Serve from DB if available
+    const stored = await this.walletProfileRepo.findByAddress(address);
+    if (stored) {
+      return {
+        walletAddress: stored.walletAddress,
+        totalPositions: stored.totalPositions,
+        totalCurrentValue: parseFloat(stored.totalCurrentValue),
+        totalRealizedPnl: parseFloat(stored.totalRealizedPnl),
+        totalCashPnl: parseFloat(stored.totalCashPnl),
+        btcUpdownPositions: stored.btcUpdownPositions,
+        favoriteCategories: stored.favoriteCategories,
+        fetchedAt: stored.fetchedAt,
+      };
+    }
 
+    // Fallback: fetch live from Polymarket and store result
+    const url = `${this.appConfig.polymarketDataUrl}/positions`;
     try {
       const res = await firstValueFrom(
-        this.httpService.get(url, {
-          params: { user: address, limit: 500 },
-          timeout: 15_000,
-        }),
+        this.httpService.get(url, { params: { user: address, limit: 500 }, timeout: 15_000 }),
       );
-
       const positions: PolymarketUserPosition[] = Array.isArray(res.data) ? res.data : [];
-      if (!positions.length) {
-        return {
-          walletAddress: address,
-          totalPositions: 0,
-          totalCurrentValue: 0,
-          totalRealizedPnl: 0,
-          totalCashPnl: 0,
-          btcUpdownPositions: 0,
-          favoriteCategories: [],
-        };
-      }
 
       const totalCurrentValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
       const totalRealizedPnl = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
       const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
       const btcUpdownPositions = positions.filter((p) => p.eventSlug?.startsWith('btc-updown')).length;
 
-      // Derive category from event slug (first segment before first hyphen-group)
       const categoryCounts: Record<string, number> = {};
       for (const p of positions) {
         const category = p.eventSlug?.split('-')[0] ?? 'other';
@@ -186,6 +188,17 @@ export class AnalyticsService {
         .map(([category, count]) => ({ category, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
+
+      // Persist for future requests
+      await this.walletProfileRepo.upsert({
+        walletAddress: address,
+        totalPositions: positions.length,
+        totalCurrentValue: String(totalCurrentValue),
+        totalRealizedPnl: String(totalRealizedPnl),
+        totalCashPnl: String(totalCashPnl),
+        btcUpdownPositions,
+        favoriteCategories,
+      }).catch(() => { /* non-critical */ });
 
       return {
         walletAddress: address,

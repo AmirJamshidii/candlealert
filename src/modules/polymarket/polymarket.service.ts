@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { AppConfig } from '../../config/app.config';
 import { PolymarketWinnerRepository } from './polymarket-winner.repository';
+import { WalletProfileRepository } from './wallet-profile.repository';
 import { IWinner, IPosition } from '../telegram/telegram-message.factory';
 import { ReversalDirection } from '../../events/reversal-signal.event';
 import { ErrorLogService } from '../error-log/error-log.service';
@@ -33,6 +34,15 @@ interface PolymarketPositionGroup {
   positions: PolymarketPosition[];
 }
 
+interface PolymarketUserPosition {
+  conditionId: string;
+  size: number;
+  currentValue: number;
+  realizedPnl: number;
+  cashPnl: number;
+  eventSlug: string;
+}
+
 @Injectable()
 export class PolymarketService {
   private readonly logger = new Logger(PolymarketService.name);
@@ -41,6 +51,7 @@ export class PolymarketService {
     private readonly httpService: HttpService,
     private readonly appConfig: AppConfig,
     private readonly winnerRepo: PolymarketWinnerRepository,
+    private readonly walletProfileRepo: WalletProfileRepository,
     private readonly errorLogService: ErrorLogService,
   ) { }
 
@@ -66,6 +77,10 @@ export class PolymarketService {
         this.getTopHolders(conditionId, question, signalKey, interval, closeTime, outcomeIndex, outcomeSide),
         this.getTopPositionsByPnl(conditionId, question, outcomeIndex),
       ]);
+
+      // Fetch and store wallet profiles for top holders in background (non-blocking)
+      void this.fetchAndStoreWalletProfiles(holders.map(h => h.walletAddress));
+
       return { holders, positions };
     } catch (err) {
       this.errorLogService.log(err, { module: 'polymarket' });
@@ -168,6 +183,65 @@ export class PolymarketService {
     } catch (err) {
       this.logger.error(`[API] GET ${holdersUrl} → FAILED`, err);
       return [];
+    }
+  }
+
+  private async fetchAndStoreWalletProfiles(addresses: string[]): Promise<void> {
+    const profiles = await Promise.all(
+      addresses.map(addr => this.fetchWalletProfile(addr).catch(() => null)),
+    );
+    const valid = profiles.filter(Boolean);
+    if (valid.length) {
+      await this.walletProfileRepo.upsertMany(valid).catch(err =>
+        this.errorLogService.log(err, { module: 'polymarket-profiles' }),
+      );
+      this.logger.log(`Stored ${valid.length} wallet profiles`);
+    }
+  }
+
+  private async fetchWalletProfile(address: string): Promise<{
+    walletAddress: string;
+    totalPositions: number;
+    totalCurrentValue: string;
+    totalRealizedPnl: string;
+    totalCashPnl: string;
+    btcUpdownPositions: number;
+    favoriteCategories: { category: string; count: number }[];
+  } | null> {
+    const url = `${this.appConfig.polymarketDataUrl}/positions`;
+    try {
+      const res = await firstValueFrom(
+        this.httpService.get(url, { params: { user: address, limit: 500 }, timeout: 15_000 }),
+      );
+      const positions: PolymarketUserPosition[] = Array.isArray(res.data) ? res.data : [];
+
+      const totalCurrentValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+      const totalRealizedPnl = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
+      const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
+      const btcUpdownPositions = positions.filter(p => p.eventSlug?.startsWith('btc-updown')).length;
+
+      const categoryCounts: Record<string, number> = {};
+      for (const p of positions) {
+        const cat = p.eventSlug?.split('-')[0] ?? 'other';
+        categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+      }
+      const favoriteCategories = Object.entries(categoryCounts)
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+
+      return {
+        walletAddress: address,
+        totalPositions: positions.length,
+        totalCurrentValue: String(totalCurrentValue),
+        totalRealizedPnl: String(totalRealizedPnl),
+        totalCashPnl: String(totalCashPnl),
+        btcUpdownPositions,
+        favoriteCategories,
+      };
+    } catch (err) {
+      this.logger.warn(`Failed to fetch wallet profile for ${address}: ${err}`);
+      return null;
     }
   }
 
