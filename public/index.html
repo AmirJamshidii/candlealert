@@ -238,7 +238,7 @@
     .ctable tbody tr { border-bottom: 1px solid var(--border); }
     .ctable tbody tr:last-child { border-bottom: none; }
     .ctable tbody tr:hover td { background: var(--surface2); }
-    .ctable tbody td { background: transparent; color: var(--text); font-size: 14px; padding: 13px 14px; border: none; }
+    .ctable tbody td { background: transparent; color: var(--text); font-size: 14px; padding: 13px 14px; border: none; text-align: center; }
     .ctable tbody tr.expand-row td { padding: 0; background: var(--bg); }
     .ctable tbody tr.expand-row:hover td { background: var(--bg); }
 
@@ -270,6 +270,20 @@
     .expand-btn:hover { background: var(--primary-bg); }
     .expand-btn .material-icons { font-size: 16px; transition: transform 0.2s; }
     .expand-btn.open .material-icons { transform: rotate(180deg); }
+
+    /* ── Signals filter bar ── */
+    .signals-filter-bar { display: flex; gap: 12px; padding: 0 20px 12px; flex-wrap: wrap; align-items: center; }
+    .filter-group { display: flex; gap: 4px; }
+    .filter-sep { color: var(--border); font-size: 18px; line-height: 1; align-self: center; }
+    .filter-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; transition: background 0.15s; }
+    .filter-btn.active { background: var(--primary-bg); color: var(--on-primary); border-color: var(--on-primary); }
+    /* ── Signals table rows ── */
+    .sig-row-red > td:first-child { border-left: 3px solid var(--red); }
+    .sig-row-green > td:first-child { border-left: 3px solid var(--green); }
+    .sig-key-link { color: var(--text); font-size: 13px; font-family: monospace; text-decoration: none; }
+    .sig-key-link:hover { color: var(--on-primary); text-decoration: underline; }
+    .sortable { cursor: pointer; user-select: none; }
+    .sortable:hover { color: var(--on-primary); }
 
     /* ── Inline badges ── */
     .badge-interval {
@@ -459,18 +473,25 @@
     <section class="section" id="signals">
       <div class="section-header">
         <div class="section-title">Signals</div>
-        <div class="section-sub">All recent reversal signals — click View to see Polymarket top holders</div>
+        <div class="section-sub">All recent reversal signals — click a signal to see Polymarket top holders</div>
       </div>
       <div class="table-card">
-        <div class="ctable-wrap" style="padding-top:16px">
+        <div class="signals-filter-bar">
+          <div class="filter-group" id="dirFilter">
+            <button class="filter-btn active" data-val="" onclick="setSigFilterDir(this)">All</button>
+            <button class="filter-btn" data-val="green_to_red" onclick="setSigFilterDir(this)">G→R</button>
+            <button class="filter-btn" data-val="red_to_green" onclick="setSigFilterDir(this)">R→G</button>
+          </div>
+          <span class="filter-sep">|</span>
+          <div class="filter-group" id="intFilter"></div>
+        </div>
+        <div class="ctable-wrap" style="padding-top:0">
           <table class="ctable" id="signalsTable">
             <thead>
               <tr>
-                <th>Time (UTC)</th>
-                <th>Interval</th>
-                <th>Direction</th>
-                <th>Signal Key</th>
-                <th>Winners</th>
+                <th class="sortable" onclick="sortSignals('interval')">Interval <span id="sort-interval"></span></th>
+                <th class="sortable" onclick="sortSignals('direction')">Direction <span id="sort-direction"></span></th>
+                <th class="sortable" onclick="sortSignals('time')">Signal <span id="sort-time">▼</span></th>
                 <th></th>
               </tr>
             </thead>
@@ -976,7 +997,7 @@ async function loadLeaderboard() {
     const safeAddr = addr.replace(/[^a-z0-9]/gi, '');
     return `<tr>
       <td style="color:var(--text2);font-size:13px">${i + 1}</td>
-      <td>
+      <td style="text-align: start;">
         <button class="expand-btn" id="lb-btn-${safeAddr}" onclick="toggleProfileExpand('${addr}', this)" title="${name ? abbrev(addr) : 'View Polymarket portfolio'}">
           <span class="material-icons">expand_more</span>${label}
         </button>
@@ -991,49 +1012,128 @@ async function loadLeaderboard() {
 }
 
 // ── Signals page (custom table with expand) ──
-async function loadSignals() {
-  const d = await fetchJSON('/api/alerts?limit=200');
-  if (!d) return;
+let signalsData = [];
+let sigSortCol = 'time';
+let sigSortDir = 'desc';
+let sigFilterDir = '';
+let sigFilterInt = '';
 
-  // Deduplicate by signalKey (keep first occurrence per key)
-  const seen = new Set();
-  const unique = d.filter(r => {
-    if (seen.has(r.signalKey)) return false;
-    seen.add(r.signalKey);
-    return true;
+function signalKeyToTime(key) {
+  const ts = Number(key.split(':').pop());
+  if (!ts) return key;
+  const d = new Date(ts);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const min = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function renderSignalsTable() {
+  let filtered = signalsData.filter(r =>
+    (!sigFilterDir || r.direction === sigFilterDir) &&
+    (!sigFilterInt || r.interval === sigFilterInt)
+  );
+
+  filtered.sort((a, b) => {
+    let av, bv;
+    if (sigSortCol === 'time') {
+      av = Number(a.signalKey.split(':').pop()) || 0;
+      bv = Number(b.signalKey.split(':').pop()) || 0;
+    } else if (sigSortCol === 'interval') {
+      av = a.interval || '';
+      bv = b.interval || '';
+    } else {
+      av = a.direction || '';
+      bv = b.direction || '';
+    }
+    if (av < bv) return sigSortDir === 'asc' ? -1 : 1;
+    if (av > bv) return sigSortDir === 'asc' ? 1 : -1;
+    return 0;
   });
 
-  const rows = unique.map(r => {
+  const rows = filtered.map(r => {
     const safeKey = r.signalKey.replace(/[^a-z0-9]/gi, '');
-    const ts = r.sentAt ? new Date(r.sentAt).getTime() : Number(r.candleCloseTime);
-    return `<tr>
-      <td style="font-size:13px;color:var(--text2)">${fmtTime(ts)}</td>
+    const ts = r.sentAt ? new Date(r.sentAt).getTime() : (Number(r.signalKey.split(':').pop()) || 0);
+    const relAge = ts ? timeAgo(ts) : '';
+    const dirClass = r.direction === 'green_to_red' ? 'red' : 'green';
+    return `<tr class="sig-row sig-row-${dirClass}">
       <td>${intervalBadgeHtml(r.interval)}</td>
       <td>${dirBadgeHtml(r.direction)}</td>
-      <td style="font-family:monospace;font-size:12px;color:var(--text2)">${r.signalKey}</td>
-      <td id="wcount-${safeKey}" style="color:var(--text3)">—</td>
+      <td>
+        <a class="sig-key-link" href="#" title="${r.signalKey}${relAge ? ' · ' + relAge : ''}"
+           onclick="toggleSignalWinners('${r.signalKey}', document.getElementById('sig-btn-${safeKey}')||this); return false;">
+          ${signalKeyToTime(r.signalKey)}
+        </a>
+      </td>
       <td>
         <button class="expand-btn" id="sig-btn-${safeKey}" onclick="toggleSignalWinners('${r.signalKey}', this)">
-          <span class="material-icons">expand_more</span>View
+          <span class="material-icons">expand_more</span>
         </button>
       </td>
     </tr>`;
   });
 
   renderCustomTable('signalsTbody', 'signalsEmpty', rows);
+}
 
-  // Load winner counts lazily for the visible page (first 20)
-  unique.slice(0, 20).forEach(async r => {
-    const safeKey = r.signalKey.replace(/[^a-z0-9]/gi, '');
-    const cell = document.getElementById(`wcount-${safeKey}`);
-    if (!cell) return;
-    const winners = await fetchJSON(`/api/analytics/winners/by-signal/${encodeURIComponent(r.signalKey)}`);
-    if (winners && cell) {
-      winnersCache.set(r.signalKey, winners);
-      cell.textContent = winners.length || '—';
-      if (winners.length) cell.style.color = 'var(--on-primary)';
-    }
+function sortSignals(col) {
+  if (sigSortCol === col) {
+    sigSortDir = sigSortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    sigSortCol = col;
+    sigSortDir = col === 'time' ? 'desc' : 'asc';
+  }
+  ['time', 'interval', 'direction'].forEach(c => {
+    const el = document.getElementById(`sort-${c}`);
+    if (el) el.textContent = c === sigSortCol ? (sigSortDir === 'asc' ? '▲' : '▼') : '';
   });
+  renderSignalsTable();
+}
+
+function setSigFilterDir(btn) {
+  sigFilterDir = btn.dataset.val;
+  document.querySelectorAll('#dirFilter .filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderSignalsTable();
+}
+
+function setSigFilterInt(btn) {
+  sigFilterInt = btn.dataset.val;
+  document.querySelectorAll('#intFilter .filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderSignalsTable();
+}
+
+async function loadSignals() {
+  const d = await fetchJSON('/api/alerts?limit=200');
+  if (!d) return;
+
+  const seen = new Set();
+  signalsData = d.filter(r => {
+    if (seen.has(r.signalKey)) return false;
+    seen.add(r.signalKey);
+    return true;
+  });
+
+  // Build interval filter buttons dynamically
+  const intervals = [...new Set(signalsData.map(r => r.interval).filter(Boolean))];
+  const intFilter = document.getElementById('intFilter');
+  if (intFilter) {
+    intFilter.innerHTML = `<button class="filter-btn active" data-val="" onclick="setSigFilterInt(this)">All</button>` +
+      intervals.map(iv => `<button class="filter-btn" data-val="${iv}" onclick="setSigFilterInt(this)">${iv}</button>`).join('');
+  }
+
+  renderSignalsTable();
 }
 
 // ── Errors (Grid.js) ──
