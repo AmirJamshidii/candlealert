@@ -134,6 +134,20 @@ export class AnalyticsController {
     );
   }
 
+  @Get('wallets/top-suspects')
+  @ApiOperation({ summary: 'Top suspect wallets ranked by composite score (signals + BTC focus + PnL + position size)' })
+  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Lookback window in days (default 30)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Candidate pool size (default 50)' })
+  getTopSuspects(
+    @Query('days') days?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.analyticsService.getTopSuspects(
+      days ? parseInt(days, 10) : 30,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
   @Get('wallets/:address/profile')
   @ApiOperation({ summary: 'Polymarket portfolio profile for a wallet address' })
   @ApiParam({ name: 'address', example: '0xabc123' })

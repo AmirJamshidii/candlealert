@@ -82,6 +82,49 @@ export class AnalyticsService {
     return this.winnerRepo.getWinRateLeaderboard(days, limit, minAppearances);
   }
 
+  async getTopSuspects(
+    days: number,
+    limit: number,
+  ): Promise<{
+    walletAddress: string;
+    displayName: string | null;
+    signalCount: number;
+    totalWagered: number;
+    totalPnl: number;
+    btcRatio: number;
+    suspectScore: number;
+  }[]> {
+    const raw = await this.winnerRepo.getTopSuspects(days, limit);
+    if (!raw.length) return [];
+
+    const norm = (val: number, min: number, max: number) =>
+      max === min ? 1 : (val - min) / (max - min);
+
+    const mins = {
+      signalCount: Math.min(...raw.map((r) => r.signalCount)),
+      totalWagered: Math.min(...raw.map((r) => r.totalWagered)),
+      totalPnl: Math.min(...raw.map((r) => r.totalPnl)),
+      btcRatio: Math.min(...raw.map((r) => r.btcRatio)),
+    };
+    const maxs = {
+      signalCount: Math.max(...raw.map((r) => r.signalCount)),
+      totalWagered: Math.max(...raw.map((r) => r.totalWagered)),
+      totalPnl: Math.max(...raw.map((r) => r.totalPnl)),
+      btcRatio: Math.max(...raw.map((r) => r.btcRatio)),
+    };
+
+    return raw
+      .map((r) => ({
+        ...r,
+        suspectScore:
+          0.3 * norm(r.signalCount, mins.signalCount, maxs.signalCount) +
+          0.3 * norm(r.btcRatio, mins.btcRatio, maxs.btcRatio) +
+          0.2 * norm(r.totalPnl, mins.totalPnl, maxs.totalPnl) +
+          0.2 * norm(r.totalWagered, mins.totalWagered, maxs.totalWagered),
+      }))
+      .sort((a, b) => b.suspectScore - a.suspectScore);
+  }
+
   getHolderHistory(walletAddress: string): Promise<PolymarketWinnerEntity[]> {
     return this.winnerRepo.getHolderHistory(walletAddress);
   }

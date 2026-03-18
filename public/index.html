@@ -137,6 +137,7 @@
     .stat-number.blue  { color: var(--primary); }
     .stat-number.teal  { color: var(--teal); }
     .stat-number.yellow { color: var(--yellow); }
+    .stat-number.red    { color: var(--red); }
     .stat-sub { font-size: 13px; color: var(--text2); margin-top: 6px; }
     .intervals-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .chip {
@@ -408,6 +409,36 @@
         </div>
       </div>
 
+      <!-- Second row stat cards -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--red)">swap_vert</span> Direction Bias</div>
+          <div class="stat-number" id="dirBiasValue">—</div>
+          <div class="stat-sub" id="dirBiasSubtitle"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--yellow)">gavel</span> Top Suspect</div>
+          <div class="stat-period-tabs" id="extraStatsPeriodTabs">
+            <button class="period-tab active" data-period="today" onclick="setExtraStatsPeriod('today')">Today</button>
+            <button class="period-tab" data-period="1d" onclick="setExtraStatsPeriod('1d')">1D</button>
+            <button class="period-tab" data-period="7d" onclick="setExtraStatsPeriod('7d')">7D</button>
+            <button class="period-tab" data-period="total" onclick="setExtraStatsPeriod('total')">Total</button>
+          </div>
+          <div class="stat-number" id="topSuspectValue" style="font-size:18px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
+          <div class="stat-sub" id="topSuspectSubtitle"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--primary)">filter_center_focus</span> Most Targeted</div>
+          <div class="stat-number blue" id="mostTargetedInterval">—</div>
+          <div class="stat-sub" id="mostTargetedSubtitle"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label"><span class="material-icons" style="color:var(--yellow)">repeat</span> Repeat Suspects</div>
+          <div class="stat-number yellow" id="repeatSuspectsValue">—</div>
+          <div class="stat-sub" id="repeatSuspectsSubtitle">wallets in 3+ signals</div>
+        </div>
+      </div>
+
       <div class="charts-grid">
         <div class="chart-card">
           <div class="chart-card-header">
@@ -584,6 +615,10 @@ let walletsPeriod = 'today';
 let priceInterval = null;
 let priceChartInstance = null;
 let topWalletsDays = 1;
+let extraStatsPeriod = 'today';
+let extraLeaderboardData = [];
+let dirBiasData = null;
+let signalSummaryData = null;
 
 function computeSinceMs(period) {
   if (period === 'today') {
@@ -788,7 +823,7 @@ function setPriceInterval(interval) {
 
 // ── Top Wallets list ──
 async function loadTopWallets() {
-  const d = await fetchJSON(`/api/analytics/holders/leaderboard?days=${topWalletsDays}&limit=10`);
+  const d = await fetchJSON(`/api/analytics/wallets/top-suspects?days=${topWalletsDays}&limit=10`);
   const listEl = document.getElementById('topWalletsList');
   const emptyEl = document.getElementById('topWalletsEmpty');
   if (!d || !d.length) {
@@ -797,13 +832,19 @@ async function loadTopWallets() {
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
-  listEl.innerHTML = d.map((r, i) => `
+  listEl.innerHTML = d.map((r, i) => {
+    const scorePct = Math.round((r.suspectScore ?? 0) * 100);
+    return `
     <div class="top-wallet-row">
       <span class="top-wallet-rank">#${i + 1}</span>
       <span class="top-wallet-name">${walletLinkHtml(r.walletAddress, r.displayName)}</span>
       <span class="top-wallet-sigs">${r.signalCount} sig</span>
-      <span class="top-wallet-shares">${fmtNum(r.totalPosition)}</span>
-    </div>`).join('');
+      <span class="top-wallet-shares" style="display:flex;align-items:center;gap:6px">
+        ${fmtNum(r.totalWagered)}
+        <span style="background:rgba(251,188,4,0.15);color:#fbbc04;border:1px solid rgba(251,188,4,0.3);border-radius:6px;padding:1px 6px;font-size:10px;font-weight:600">${scorePct}%</span>
+      </span>
+    </div>`;
+  }).join('');
 }
 
 function setTopWalletsDays(days) {
@@ -1129,6 +1170,82 @@ async function loadErrors() {
   );
 }
 
+// ── Extra stat cards ──
+function periodToDays(period) {
+  if (period === 'today' || period === '1d') return 1;
+  if (period === '7d') return 7;
+  return 3650;
+}
+
+async function loadDirectionBias() {
+  if (!dirBiasData) {
+    const d = await fetchJSON('/api/analytics/signals/directions');
+    if (!d) return;
+    dirBiasData = d;
+  }
+  let gtr = 0, rtg = 0;
+  dirBiasData.forEach(r => {
+    if (r.direction === 'green_to_red') gtr += Number(r.count);
+    else if (r.direction === 'red_to_green') rtg += Number(r.count);
+  });
+  const total = gtr + rtg;
+  const el = document.getElementById('dirBiasValue');
+  const sub = document.getElementById('dirBiasSubtitle');
+  if (!total) { if (el) el.textContent = '—'; return; }
+  const dumpPct = Math.round((gtr / total) * 100);
+  const isDumpHeavy = gtr >= rtg;
+  if (el) {
+    el.textContent = isDumpHeavy ? `${dumpPct}% Dumps` : `${100 - dumpPct}% Pumps`;
+    el.className = `stat-number ${isDumpHeavy ? 'red' : 'green'}`;
+  }
+  if (sub) sub.textContent = `G→R: ${gtr.toLocaleString()} · R→G: ${rtg.toLocaleString()}`;
+}
+
+async function loadMostTargetedInterval() {
+  if (!signalSummaryData) {
+    const d = await fetchJSON('/api/analytics/signals/summary');
+    if (!d || !d.length) return;
+    signalSummaryData = d;
+  }
+  const best = signalSummaryData.reduce((a, b) => Number(b.count) > Number(a.count) ? b : a);
+  const el = document.getElementById('mostTargetedInterval');
+  const sub = document.getElementById('mostTargetedSubtitle');
+  if (el) el.textContent = best.interval;
+  if (sub) sub.textContent = `${Number(best.count).toLocaleString()} signals total`;
+}
+
+async function loadTopSuspects() {
+  const days = periodToDays(extraStatsPeriod);
+  const d = await fetchJSON(`/api/analytics/wallets/top-suspects?days=${days}&limit=50`);
+  extraLeaderboardData = d || [];
+
+  const topEl = document.getElementById('topSuspectValue');
+  const topSub = document.getElementById('topSuspectSubtitle');
+  if (!extraLeaderboardData.length) {
+    if (topEl) topEl.textContent = '—';
+    if (topSub) topSub.innerHTML = 'no data';
+  } else {
+    const top = extraLeaderboardData[0];
+    const scorePct = Math.round((top.suspectScore ?? 0) * 100);
+    if (topEl) topEl.innerHTML = walletLinkHtml(top.walletAddress, top.displayName);
+    if (topSub) topSub.innerHTML = `${Number(top.signalCount).toLocaleString()} signal${top.signalCount !== 1 ? 's' : ''} &nbsp;<span style="background:rgba(251,188,4,0.15);color:#fbbc04;border:1px solid rgba(251,188,4,0.3);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:500">Score: ${scorePct}%</span>`;
+  }
+
+  const repeatCount = extraLeaderboardData.filter(r => Number(r.signalCount) >= 3).length;
+  const repeatEl = document.getElementById('repeatSuspectsValue');
+  const repeatSub = document.getElementById('repeatSuspectsSubtitle');
+  if (repeatEl) repeatEl.textContent = repeatCount.toLocaleString();
+  if (repeatSub) repeatSub.textContent = `wallets in 3+ signals`;
+}
+
+function setExtraStatsPeriod(period) {
+  extraStatsPeriod = period;
+  document.querySelectorAll('#extraStatsPeriodTabs .period-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.period === period);
+  });
+  void loadTopSuspects();
+}
+
 async function loadAll() {
   await Promise.all([
     loadHealth(),
@@ -1143,6 +1260,9 @@ async function loadAll() {
     loadAlerts(),
     loadWinners(),
     loadErrors(),
+    loadDirectionBias(),
+    loadMostTargetedInterval(),
+    loadTopSuspects(),
   ]);
 }
 
