@@ -293,6 +293,27 @@
 
     a { color: var(--on-primary); text-decoration: none; }
     a:hover { color: #8ab4f8; text-decoration: underline; }
+
+    /* ── Period tabs (inside stat cards) ── */
+    .stat-period-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+    .period-tab {
+      padding: 3px 9px; border-radius: 6px; font-size: 11px; font-weight: 500;
+      cursor: pointer; color: var(--text2); background: transparent;
+      border: 1px solid var(--border); transition: all 0.15s;
+    }
+    .period-tab:hover { background: var(--surface2); color: var(--text); }
+    .period-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* ── Top Wallets list ── */
+    .top-wallet-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 20px; border-bottom: 1px solid var(--border);
+    }
+    .top-wallet-row:last-child { border-bottom: none; }
+    .top-wallet-rank { color: var(--text2); font-size: 13px; font-weight: 500; min-width: 22px; }
+    .top-wallet-name { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .top-wallet-sigs { font-size: 11px; color: var(--text3); white-space: nowrap; }
+    .top-wallet-shares { font-size: 13px; color: var(--text2); white-space: nowrap; min-width: 70px; text-align: right; }
   </style>
 </head>
 <body>
@@ -358,6 +379,12 @@
       <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-label"><span class="material-icons" style="color:var(--green)">bolt</span> Total Signals Fired</div>
+          <div class="stat-period-tabs" id="signalPeriodTabs">
+            <button class="period-tab active" data-period="today" onclick="setSignalPeriod('today')">Today</button>
+            <button class="period-tab" data-period="1d" onclick="setSignalPeriod('1d')">1D</button>
+            <button class="period-tab" data-period="7d" onclick="setSignalPeriod('7d')">7D</button>
+            <button class="period-tab" data-period="total" onclick="setSignalPeriod('total')">Total</button>
+          </div>
           <div class="stat-number green" id="totalSignals">—</div>
         </div>
         <div class="stat-card">
@@ -365,7 +392,13 @@
           <div class="intervals-wrap" id="activeIntervals"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label"><span class="material-icons" style="color:var(--teal)">account_balance_wallet</span> Tracked Wallets (30d)</div>
+          <div class="stat-label"><span class="material-icons" style="color:var(--teal)">account_balance_wallet</span> Tracked Wallets</div>
+          <div class="stat-period-tabs" id="walletPeriodTabs">
+            <button class="period-tab active" data-period="today" onclick="setWalletPeriod('today')">Today</button>
+            <button class="period-tab" data-period="1d" onclick="setWalletPeriod('1d')">1D</button>
+            <button class="period-tab" data-period="7d" onclick="setWalletPeriod('7d')">7D</button>
+            <button class="period-tab" data-period="total" onclick="setWalletPeriod('total')">Total</button>
+          </div>
           <div class="stat-number teal" id="trackedWallets">—</div>
         </div>
         <div class="stat-card">
@@ -378,22 +411,29 @@
       <div class="charts-grid">
         <div class="chart-card">
           <div class="chart-card-header">
-            <span class="material-icons" style="color:var(--primary)">trending_up</span>
-            Signal Timeline
-            <div class="chart-card-header-right">
-              <button class="range-tab" data-days="7" onclick="setTimelineRange(7)">7d</button>
-              <button class="range-tab" data-days="14" onclick="setTimelineRange(14)">14d</button>
-              <button class="range-tab active" data-days="30" onclick="setTimelineRange(30)">30d</button>
-            </div>
+            <span class="material-icons" style="color:var(--primary)">candlestick_chart</span>
+            BTC Live Price
+            <div class="chart-card-header-right" id="priceIntervalTabs"></div>
           </div>
-          <div class="chart-card-body"><canvas id="timelineChart" height="100"></canvas></div>
+          <div class="chart-card-body" style="padding:0"><div id="priceChart" style="height:260px"></div></div>
         </div>
         <div class="chart-card">
           <div class="chart-card-header">
-            <span class="material-icons" style="color:var(--yellow)">donut_small</span>
-            Signals by Interval
+            <span class="material-icons" style="color:var(--yellow)">leaderboard</span>
+            Top Wallets
+            <div class="chart-card-header-right" id="topWalletsTabs">
+              <button class="range-tab active" data-days="1" onclick="setTopWalletsDays(1)">24h</button>
+              <button class="range-tab" data-days="3" onclick="setTopWalletsDays(3)">72h</button>
+              <button class="range-tab" data-days="7" onclick="setTopWalletsDays(7)">1W</button>
+            </div>
           </div>
-          <div class="chart-card-body center"><canvas id="intervalChart" style="max-height:200px"></canvas></div>
+          <div class="chart-card-body" style="padding:0">
+            <div id="topWalletsList"></div>
+            <div id="topWalletsEmpty" class="empty-state" style="display:none">
+              <span class="material-icons">account_balance_wallet</span>
+              No wallet data yet.
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -521,6 +561,7 @@
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/gridjs/dist/gridjs.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
 const COLORS = ['#1a73e8','#34a853','#fbbc04','#ea4335','#8957e5','#00bcd4'];
@@ -534,9 +575,25 @@ const TITLES = {
   errors: 'Error Log',
 };
 
-let timelineChart, intervalChart;
-let timelineDays = 30;
+let intervalChart;
 const grids = {};
+
+// ── Overview state ──
+let signalPeriod = 'today';
+let walletsPeriod = 'today';
+let priceInterval = null;
+let priceChartInstance = null;
+let topWalletsDays = 1;
+
+function computeSinceMs(period) {
+  if (period === 'today') {
+    const d = new Date();
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+  if (period === '1d') return Date.now() - 86400000;
+  if (period === '7d') return Date.now() - 7 * 86400000;
+  return null; // 'total' → no filter
+}
 
 // ── State for expand rows ──
 const profileCache = new Map();   // address → profile data
@@ -629,13 +686,123 @@ async function fetchJSON(url) {
   try { const r = await fetch(url); return r.ok ? r.json() : null; } catch { return null; }
 }
 
-// ── Timeline range picker ──
-function setTimelineRange(days) {
-  timelineDays = days;
-  document.querySelectorAll('.range-tab').forEach(t => {
+// ── Signal count with period ──
+async function loadSignalCount() {
+  const sinceMs = computeSinceMs(signalPeriod);
+  const url = sinceMs !== null ? `/api/analytics/signals/count?since=${sinceMs}` : '/api/analytics/signals/count';
+  const d = await fetchJSON(url);
+  if (d == null) return;
+  document.getElementById('totalSignals').textContent = Number(d.count).toLocaleString();
+}
+
+function setSignalPeriod(period) {
+  signalPeriod = period;
+  document.querySelectorAll('#signalPeriodTabs .period-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.period === period);
+  });
+  void loadSignalCount();
+}
+
+// ── Wallet count with period ──
+async function loadWalletCount() {
+  const sinceMs = computeSinceMs(walletsPeriod);
+  const url = sinceMs !== null ? `/api/analytics/holders/count?since=${sinceMs}` : '/api/analytics/holders/count';
+  const d = await fetchJSON(url);
+  if (d == null) return;
+  document.getElementById('trackedWallets').textContent = Number(d.count).toLocaleString();
+}
+
+function setWalletPeriod(period) {
+  walletsPeriod = period;
+  document.querySelectorAll('#walletPeriodTabs .period-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.period === period);
+  });
+  void loadWalletCount();
+}
+
+// ── BTC Live Price chart ──
+async function loadPriceChart() {
+  if (!priceInterval) return;
+  const d = await fetchJSON(`/api/analytics/btc/candles?interval=${priceInterval}&limit=200`);
+  if (!d || !d.candles) return;
+
+  const container = document.getElementById('priceChart');
+  if (priceChartInstance) { priceChartInstance.remove(); priceChartInstance = null; }
+
+  priceChartInstance = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 260,
+    layout: { background: { color: '#1e1e1e' }, textColor: '#9aa0a6' },
+    grid: { vertLines: { color: '#3c3c3c' }, horzLines: { color: '#3c3c3c' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#3c3c3c' },
+    timeScale: { borderColor: '#3c3c3c', timeVisible: true, secondsVisible: false },
+  });
+
+  const candleSeries = priceChartInstance.addCandlestickSeries({
+    upColor: '#34a853', downColor: '#ea4335',
+    borderUpColor: '#34a853', borderDownColor: '#ea4335',
+    wickUpColor: '#34a853', wickDownColor: '#ea4335',
+  });
+
+  candleSeries.setData(d.candles);
+
+  if (d.signals && d.signals.length > 0) {
+    const markers = d.signals
+      .filter(s => s.time)
+      .sort((a, b) => a.time - b.time)
+      .map(s => ({
+        time: s.time,
+        position: s.direction === 'green_to_red' ? 'aboveBar' : 'belowBar',
+        color: s.direction === 'green_to_red' ? '#ea4335' : '#34a853',
+        shape: s.direction === 'green_to_red' ? 'arrowDown' : 'arrowUp',
+        text: s.direction === 'green_to_red' ? 'G→R' : 'R→G',
+      }));
+    candleSeries.setMarkers(markers);
+  }
+
+  priceChartInstance.timeScale().fitContent();
+
+  const ro = new ResizeObserver(() => {
+    if (priceChartInstance) priceChartInstance.applyOptions({ width: container.clientWidth });
+  });
+  ro.observe(container);
+}
+
+function setPriceInterval(interval) {
+  priceInterval = interval;
+  document.querySelectorAll('#priceIntervalTabs .range-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.interval === interval);
+  });
+  void loadPriceChart();
+}
+
+// ── Top Wallets list ──
+async function loadTopWallets() {
+  const d = await fetchJSON(`/api/analytics/holders/leaderboard?days=${topWalletsDays}&limit=10`);
+  const listEl = document.getElementById('topWalletsList');
+  const emptyEl = document.getElementById('topWalletsEmpty');
+  if (!d || !d.length) {
+    listEl.innerHTML = '';
+    if (emptyEl) emptyEl.style.display = '';
+    return;
+  }
+  if (emptyEl) emptyEl.style.display = 'none';
+  listEl.innerHTML = d.map((r, i) => `
+    <div class="top-wallet-row">
+      <span class="top-wallet-rank">#${i + 1}</span>
+      <span class="top-wallet-name">${walletLinkHtml(r.walletAddress, r.displayName)}</span>
+      <span class="top-wallet-sigs">${r.signalCount} sig</span>
+      <span class="top-wallet-shares">${fmtNum(r.totalPosition)}</span>
+    </div>`).join('');
+}
+
+function setTopWalletsDays(days) {
+  topWalletsDays = days;
+  document.querySelectorAll('#topWalletsTabs .range-tab').forEach(t => {
     t.classList.toggle('active', Number(t.dataset.days) === days);
   });
-  void loadTimeline();
+  void loadTopWallets();
 }
 
 // ── Loaders ──
@@ -656,43 +823,18 @@ async function loadConfig() {
   if (!d) return;
   document.getElementById('activeIntervals').innerHTML = (d.intervals||[]).map(i => `<span class="chip">${i}</span>`).join('');
   document.getElementById('topbarMeta').textContent = `${d.symbol} · ${(d.intervals||[]).join(', ')}`;
+
+  const intervals = d.intervals || [];
+  if (intervals.length > 0 && !priceInterval) priceInterval = intervals[0];
+  const tabsContainer = document.getElementById('priceIntervalTabs');
+  if (tabsContainer && intervals.length > 0) {
+    tabsContainer.innerHTML = intervals.map(iv =>
+      `<button class="range-tab${iv === priceInterval ? ' active' : ''}" data-interval="${iv}" onclick="setPriceInterval('${iv}')">${iv}</button>`
+    ).join('');
+    void loadPriceChart();
+  }
 }
 
-async function loadSummary() {
-  const d = await fetchJSON('/api/analytics/signals/summary');
-  if (!d) return;
-  document.getElementById('totalSignals').textContent = d.reduce((s,r) => s + Number(r.count), 0).toLocaleString();
-  const labels = d.map(r => r.interval);
-  const counts = d.map(r => Number(r.count));
-  if (intervalChart) intervalChart.destroy();
-  intervalChart = new Chart(document.getElementById('intervalChart'), {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data: counts, backgroundColor: labels.map((_,i) => COLORS[i%COLORS.length]), borderWidth: 0 }] },
-    options: { cutout: '65%', plugins: { legend: { labels: { color: '#9aa0a6', font: { family: 'Roboto' } } } } },
-  });
-}
-
-async function loadTimeline() {
-  const d = await fetchJSON(`/api/analytics/signals/timeline?days=${timelineDays}`);
-  if (!d) return;
-  if (timelineChart) timelineChart.destroy();
-  timelineChart = new Chart(document.getElementById('timelineChart'), {
-    type: 'line',
-    data: {
-      labels: d.map(r => r.date),
-      datasets: [{ label: 'Signals', data: d.map(r => Number(r.count)),
-        borderColor: '#1a73e8', backgroundColor: 'rgba(26,115,232,0.1)',
-        fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#1a73e8' }],
-    },
-    options: {
-      scales: {
-        x: { ticks: { color: '#9aa0a6', maxTicksLimit: 10, font: { family: 'Roboto', size: 12 } }, grid: { color: '#3c3c3c' } },
-        y: { ticks: { color: '#9aa0a6', font: { family: 'Roboto', size: 12 } }, grid: { color: '#3c3c3c' }, beginAtZero: true },
-      },
-      plugins: { legend: { display: false } },
-    },
-  });
-}
 
 async function loadLastSignal() {
   const d = await fetchJSON('/api/alerts?limit=1');
@@ -839,7 +981,6 @@ async function toggleSignalWinners(signalKey, btnEl) {
 async function loadLeaderboard() {
   const d = await fetchJSON('/api/analytics/holders/leaderboard?days=30&limit=50');
   if (!d) return;
-  document.getElementById('trackedWallets').textContent = d.length;
 
   const rows = d.map((r, i) => {
     const addr = r.walletAddress;
@@ -983,8 +1124,9 @@ async function loadAll() {
   await Promise.all([
     loadHealth(),
     loadConfig(),
-    loadSummary(),
-    loadTimeline(),
+    loadSignalCount(),
+    loadWalletCount(),
+    loadTopWallets(),
     loadLastSignal(),
     loadLeaderboard(),
     loadPnlLeaderboard(),

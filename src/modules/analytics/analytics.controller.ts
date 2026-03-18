@@ -21,6 +21,14 @@ export class AnalyticsController {
     return this.analyticsService.getSignalSummary();
   }
 
+  @Get('signals/count')
+  @ApiOperation({ summary: 'Total signal count, optionally filtered by a since timestamp' })
+  @ApiQuery({ name: 'since', required: false, type: Number, description: 'Unix ms timestamp — count signals after this time (omit for all-time)' })
+  @ApiResponse({ status: 200, schema: { example: { count: 123 } } })
+  getSignalCount(@Query('since') since?: string) {
+    return this.analyticsService.getSignalCount(since ? parseInt(since, 10) : undefined);
+  }
+
   @Get('signals/timeline')
   @ApiOperation({ summary: 'Daily signal counts for the last N days' })
   @ApiQuery({ name: 'days', required: false, type: Number, description: 'Number of days to look back (default 7)' })
@@ -71,6 +79,23 @@ export class AnalyticsController {
   @ApiResponse({ status: 200, type: [WinnerLeaderboardDto] })
   getWinnersBySignal(@Param('signalKey') signalKey: string) {
     return this.analyticsService.getWinnersBySignal(signalKey);
+  }
+
+  @Get('holders/count')
+  @ApiOperation({ summary: 'Count of distinct holder wallets, optionally filtered by a since timestamp' })
+  @ApiQuery({ name: 'since', required: false, type: Number, description: 'Unix ms timestamp — count wallets after this time (omit for all-time)' })
+  @ApiResponse({ status: 200, schema: { example: { count: 42 } } })
+  getHolderCount(@Query('since') since?: string) {
+    return this.analyticsService.getHolderCount(since ? parseInt(since, 10) : undefined);
+  }
+
+  @Get('btc/candles')
+  @ApiOperation({ summary: 'Recent BTC/USDT candlestick data with signal markers' })
+  @ApiQuery({ name: 'interval', required: false, type: String, description: 'Candle interval (default 5m)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of candles (default 200)' })
+  @ApiResponse({ status: 200, schema: { example: { candles: [{ time: 1710000000, open: 65000, high: 65500, low: 64800, close: 64900 }], signals: [{ time: 1710000000, direction: 'green_to_red' }] } } })
+  getBtcCandles(@Query('interval') interval?: string, @Query('limit') limit?: string) {
+    return this.analyticsService.getBtcCandles(interval ?? '5m', limit ? parseInt(limit, 10) : 200);
   }
 
   @Get('holders/leaderboard')

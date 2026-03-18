@@ -90,6 +90,56 @@ export class AnalyticsService {
     return this.errorLogService.getRecent(limit, module);
   }
 
+  async getSignalCount(sinceMs?: number): Promise<{ count: number }> {
+    const count = await this.alertRepo.countSince(sinceMs);
+    return { count };
+  }
+
+  async getHolderCount(sinceMs?: number): Promise<{ count: number }> {
+    const count = await this.winnerRepo.countHoldersSince(sinceMs);
+    return { count };
+  }
+
+  async getBtcCandles(
+    interval: string,
+    limit: number,
+  ): Promise<{
+    candles: { time: number; open: number; high: number; low: number; close: number }[];
+    signals: { time: number; direction: string | null }[];
+  }> {
+    const url = `${this.appConfig.binanceBaseUrl}/api/v3/klines`;
+
+    const res = await firstValueFrom(
+      this.httpService.get(url, {
+        params: { symbol: 'BTCUSDT', interval, limit },
+        timeout: 10_000,
+      }),
+    );
+
+    const klines: unknown[][] = Array.isArray(res.data) ? res.data : [];
+
+    const candles = klines.map((k) => ({
+      time: Math.floor(parseInt(String(k[0]), 10) / 1000),
+      open: parseFloat(String(k[1])),
+      high: parseFloat(String(k[2])),
+      low: parseFloat(String(k[3])),
+      close: parseFloat(String(k[4])),
+    }));
+
+    let signals: { time: number; direction: string | null }[] = [];
+    if (candles.length > 0) {
+      const earliestMs = candles[0].time * 1000;
+      const rows = await this.alertRepo.getSignalsByIntervalSince(interval, earliestMs);
+      signals = rows.map((r) => {
+        const parts = r.signalKey.split(':');
+        const openTimeSec = Math.floor(parseInt(parts[1] ?? '0', 10) / 1000);
+        return { time: openTimeSec, direction: r.direction };
+      });
+    }
+
+    return { candles, signals };
+  }
+
   async getCandleForSignal(signalKey: string): Promise<{
     openTime: number;
     open: number;

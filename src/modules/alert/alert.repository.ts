@@ -59,4 +59,29 @@ export class AlertRepository {
        ORDER BY interval, direction`,
     );
   }
+
+  async countSince(sinceMs?: number): Promise<number> {
+    if (sinceMs !== undefined) {
+      const rows = await this.repo.manager.query(
+        `SELECT COUNT(*)::int AS count FROM alerts WHERE sent_at >= to_timestamp($1 / 1000.0)`,
+        [sinceMs],
+      );
+      return parseInt(rows[0].count, 10);
+    }
+    const rows = await this.repo.manager.query(`SELECT COUNT(*)::int AS count FROM alerts`);
+    return parseInt(rows[0].count, 10);
+  }
+
+  async getSignalsByIntervalSince(
+    interval: string,
+    sinceMs: number,
+  ): Promise<{ signalKey: string; direction: string | null }[]> {
+    return this.repo.manager.query(
+      `SELECT DISTINCT ON (signal_key) signal_key AS "signalKey", direction
+       FROM alerts
+       WHERE interval = $1 AND sent_at >= to_timestamp($2 / 1000.0)
+       ORDER BY signal_key, sent_at DESC`,
+      [interval, sinceMs],
+    );
+  }
 }

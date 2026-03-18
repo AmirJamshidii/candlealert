@@ -82,6 +82,22 @@ export class PolymarketWinnerRepository {
     });
   }
 
+  async countHoldersSince(sinceMs?: number): Promise<number> {
+    if (sinceMs !== undefined) {
+      const rows = await this.repo.manager.query(
+        `SELECT COUNT(DISTINCT wallet_address)::int AS count
+         FROM polymarket_winners
+         WHERE created_at >= to_timestamp($1 / 1000.0)`,
+        [sinceMs],
+      );
+      return parseInt(rows[0].count, 10);
+    }
+    const rows = await this.repo.manager.query(
+      `SELECT COUNT(DISTINCT wallet_address)::int AS count FROM polymarket_winners`,
+    );
+    return parseInt(rows[0].count, 10);
+  }
+
   async getWinRateLeaderboard(
     days: number,
     limit: number,
