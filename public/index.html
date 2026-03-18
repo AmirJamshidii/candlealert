@@ -745,18 +745,27 @@ async function loadPriceChart() {
     wickUpColor: '#34a853', wickDownColor: '#ea4335',
   });
 
-  candleSeries.setData(d.candles);
+  // Build signal lookup for per-candle badge coloring
+  const signalMap = new Map((d.signals || []).map(s => [s.time, s.direction]));
 
-  if (d.signals && d.signals.length > 0) {
-    const markers = d.signals
-      .filter(s => s.time)
-      .sort((a, b) => a.time - b.time)
-      .map(s => ({
-        time: s.time,
-        position: s.direction === 'green_to_red' ? 'aboveBar' : 'belowBar',
-        color: s.direction === 'green_to_red' ? '#ea4335' : '#34a853',
-        shape: s.direction === 'green_to_red' ? 'arrowDown' : 'arrowUp',
-        text: s.direction === 'green_to_red' ? 'G→R' : 'R→G',
+  const candleData = d.candles.map(c => {
+    if (!signalMap.has(c.time)) return c;
+    // Signal candle: gold border + wick to make it stand out
+    return { ...c, borderColor: '#fbbc04', wickColor: '#fbbc04' };
+  });
+
+  candleSeries.setData(candleData);
+
+  if (signalMap.size > 0) {
+    const markers = [...signalMap.entries()]
+      .filter(([time]) => time)
+      .sort(([a], [b]) => a - b)
+      .map(([time, direction]) => ({
+        time,
+        position: direction === 'green_to_red' ? 'aboveBar' : 'belowBar',
+        color: '#fbbc04',
+        shape: 'circle',
+        text: direction === 'green_to_red' ? 'G→R' : 'R→G',
       }));
     candleSeries.setMarkers(markers);
   }

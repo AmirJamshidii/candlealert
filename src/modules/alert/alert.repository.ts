@@ -75,13 +75,16 @@ export class AlertRepository {
   async getSignalsByIntervalSince(
     interval: string,
     sinceMs: number,
-  ): Promise<{ signalKey: string; direction: string | null }[]> {
-    return this.repo.manager.query(
-      `SELECT DISTINCT ON (signal_key) signal_key AS "signalKey", direction
+  ): Promise<{ candleCloseTimeMs: number; direction: string | null }[]> {
+    const rows = await this.repo.manager.query(
+      `SELECT DISTINCT candle_close_time AS "candleCloseTime", direction
        FROM alerts
-       WHERE interval = $1 AND sent_at >= to_timestamp($2 / 1000.0)
-       ORDER BY signal_key, sent_at DESC`,
+       WHERE interval = $1 AND sent_at >= to_timestamp($2 / 1000.0)`,
       [interval, sinceMs],
     );
+    return rows.map((r: Record<string, string>) => ({
+      candleCloseTimeMs: parseInt(r.candleCloseTime, 10),
+      direction: r.direction,
+    }));
   }
 }

@@ -129,15 +129,26 @@ export class AnalyticsService {
     let signals: { time: number; direction: string | null }[] = [];
     if (candles.length > 0) {
       const earliestMs = candles[0].time * 1000;
+      const intervalMs = this.parseIntervalMs(interval);
       const rows = await this.alertRepo.getSignalsByIntervalSince(interval, earliestMs);
-      signals = rows.map((r) => {
-        const parts = r.signalKey.split(':');
-        const openTimeSec = Math.floor(parseInt(parts[1] ?? '0', 10) / 1000);
-        return { time: openTimeSec, direction: r.direction };
-      });
+      signals = rows.map((r) => ({
+        // openTime = closeTime - intervalMs + 1; convert ms → seconds
+        time: Math.floor((r.candleCloseTimeMs - intervalMs + 1) / 1000),
+        direction: r.direction,
+      }));
     }
 
     return { candles, signals };
+  }
+
+  private parseIntervalMs(interval: string): number {
+    const m = interval.match(/^(\d+)([mhd])$/);
+    if (!m) return 300_000;
+    const n = parseInt(m[1], 10);
+    if (m[2] === 'm') return n * 60_000;
+    if (m[2] === 'h') return n * 3_600_000;
+    if (m[2] === 'd') return n * 86_400_000;
+    return 300_000;
   }
 
   async getCandleForSignal(signalKey: string): Promise<{
