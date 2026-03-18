@@ -22,8 +22,8 @@
     "docker:detached": "docker-compose up --build -d",
     "docker:down": "docker-compose down",
     "docker:build": "docker-compose build",
-    "dev:infra": "docker compose -f docker-compose.dev.yml up -d",
-    "dev:infra:down": "docker compose -f docker-compose.dev.yml down",
+    "dev:infra": "docker compose up -d postgres",
+    "dev:infra:down": "docker compose stop postgres",
     "dev": "npm run dev:infra && DB_HOST=localhost npm run start:dev"
   },
   "dependencies": {
