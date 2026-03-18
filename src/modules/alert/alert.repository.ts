@@ -15,8 +15,8 @@ export class AlertRepository {
     return count > 0;
   }
 
-  async record(signalKey: string, chatId: string, interval: string, candleCloseTime: number, direction?: string): Promise<void> {
-    await this.repo.save({ signalKey, chatId, interval, candleCloseTime: String(candleCloseTime), direction: direction ?? null });
+  async record(signalKey: string, chatId: string, interval: string, candleCloseTime: number, direction?: string, polymarketUrl?: string): Promise<void> {
+    await this.repo.save({ signalKey, chatId, interval, candleCloseTime: String(candleCloseTime), direction: direction ?? null, polymarketUrl: polymarketUrl ?? null });
   }
 
   async getRecent(limit = 100): Promise<AlertEntity[]> {

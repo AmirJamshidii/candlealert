@@ -38,7 +38,9 @@ export class AlertService {
           }
           const msgId = await this.telegramService.sendMessage(initialMessage, chatId);
           if (msgId) messageIds.set(chatId, msgId);
-          await this.alertRepo.record(signalKey, chatId, interval, candle.closeTime, direction);
+          const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
+          const polymarketUrl = `https://polymarket.com/event/${eventSlug}`;
+          await this.alertRepo.record(signalKey, chatId, interval, candle.closeTime, direction, polymarketUrl);
           this.logger.log(`Alert sent [${chatId}] for ${signalKey}`);
         }),
       );

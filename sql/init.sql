@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   interval          VARCHAR(10)  NOT NULL,
   candle_close_time BIGINT       NOT NULL,
   direction         VARCHAR(20),
+  polymarket_url    VARCHAR(500),
   sent_at           TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE (signal_key, chat_id)
 );

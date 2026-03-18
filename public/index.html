@@ -1021,7 +1021,7 @@ let sigFilterInt = '';
 function signalKeyToTime(key) {
   const ts = Number(key.split(':').pop());
   if (!ts) return key;
-  const d = new Date(ts);
+  const d = new Date(ts + 1); // Binance closeTime is openTime+interval-1ms
   const yyyy = d.getUTCFullYear();
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
   const dd = String(d.getUTCDate()).padStart(2, '0');
@@ -1072,8 +1072,8 @@ function renderSignalsTable() {
       <td>${intervalBadgeHtml(r.interval)}</td>
       <td>${dirBadgeHtml(r.direction)}</td>
       <td>
-        <a class="sig-key-link" href="#" title="${r.signalKey}${relAge ? ' · ' + relAge : ''}"
-           onclick="toggleSignalWinners('${r.signalKey}', document.getElementById('sig-btn-${safeKey}')||this); return false;">
+        <a class="sig-key-link" href="${r.polymarketUrl || '#'}" target="_blank" rel="noopener"
+           title="${r.signalKey}${relAge ? ' · ' + relAge : ''}">
           ${signalKeyToTime(r.signalKey)}
         </a>
       </td>
