@@ -367,15 +367,6 @@
     <div class="nav-item" data-section="leaderboard">
       <span class="material-icons">leaderboard</span> Wallet Leaderboard
     </div>
-    <div class="nav-item" data-section="pnl">
-      <span class="material-icons">military_tech</span> PnL Leaderboard
-    </div>
-    <div class="nav-item" data-section="alerts">
-      <span class="material-icons">notifications</span> Recent Alerts
-    </div>
-    <div class="nav-item" data-section="winners">
-      <span class="material-icons">bar_chart</span> Recent Winners
-    </div>
     <hr class="nav-divider" />
     <div class="nav-item" data-section="errors">
       <span class="material-icons">error_outline</span> Error Log
@@ -520,56 +511,6 @@
       </div>
     </section>
 
-    <!-- ── PNL LEADERBOARD ── -->
-    <section class="section" id="pnl">
-      <div class="section-header">
-        <div class="section-title">PnL Leaderboard</div>
-        <div class="section-sub">Wallets ranked by average PnL per signal (30d, min 3 appearances). Only populated for signals after the analytics upgrade.</div>
-      </div>
-      <div class="table-card">
-        <div class="ctable-wrap" style="padding-top:16px">
-          <table class="ctable" id="pnlTable">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Wallet</th>
-                <th>Appearances</th>
-                <th>Avg PnL</th>
-                <th>Total PnL</th>
-              </tr>
-            </thead>
-            <tbody id="pnlTbody"></tbody>
-          </table>
-          <div id="pnlEmpty" class="empty-state" style="display:none">
-            <span class="material-icons">military_tech</span>
-            No PnL data yet — this populates after new signals fire.
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── ALERTS ── -->
-    <section class="section" id="alerts">
-      <div class="section-header">
-        <div class="section-title">Recent Alerts</div>
-        <div class="section-sub">Latest reversal signals sent to Telegram</div>
-      </div>
-      <div class="table-card">
-        <div id="tblAlerts"></div>
-      </div>
-    </section>
-
-    <!-- ── WINNERS ── -->
-    <section class="section" id="winners">
-      <div class="section-header">
-        <div class="section-title">Recent Winners</div>
-        <div class="section-sub">Latest Polymarket down position holders per signal</div>
-      </div>
-      <div class="table-card">
-        <div id="tblWinners"></div>
-      </div>
-    </section>
-
     <!-- ── ERRORS ── -->
     <section class="section" id="errors">
       <div class="section-header">
@@ -595,9 +536,6 @@ const TITLES = {
   overview: 'Overview',
   signals: 'Signals',
   leaderboard: 'Wallet Leaderboard',
-  pnl: 'PnL Leaderboard',
-  alerts: 'Recent Alerts',
-  winners: 'Recent Winners',
   errors: 'Error Log',
 };
 
@@ -1052,31 +990,6 @@ async function loadLeaderboard() {
   renderCustomTable('leaderboardTbody', 'leaderboardEmpty', rows);
 }
 
-// ── PnL Leaderboard (custom table with expand) ──
-async function loadPnlLeaderboard() {
-  const d = await fetchJSON('/api/analytics/wallets/leaderboard?days=30&limit=20&minAppearances=3');
-  if (!d) return;
-
-  const rows = d.map((r, i) => {
-    const addr = r.walletAddress;
-    const label = labelOrAbbrev(addr, r.displayName);
-    return `<tr>
-      <td style="color:var(--text2);font-size:13px">${i + 1}</td>
-      <td>
-        <button class="expand-btn" onclick="toggleProfileExpand('${addr}', this)" title="${r.displayName ? abbrev(addr) : 'View Polymarket portfolio'}">
-          <span class="material-icons">expand_more</span>${label}
-        </button>
-        <a href="${polyLink(addr)}" target="_blank" rel="noopener" style="margin-left:6px;font-size:12px;color:var(--text3)">↗</a>
-      </td>
-      <td>${r.appearances}</td>
-      <td>${pnlHtml(r.avgPnl)}</td>
-      <td>${pnlHtml(r.totalPnl)}</td>
-    </tr>`;
-  });
-
-  renderCustomTable('pnlTbody', 'pnlEmpty', rows);
-}
-
 // ── Signals page (custom table with expand) ──
 async function loadSignals() {
   const d = await fetchJSON('/api/alerts?limit=200');
@@ -1121,38 +1034,6 @@ async function loadSignals() {
       if (winners.length) cell.style.color = 'var(--on-primary)';
     }
   });
-}
-
-// ── Recent Alerts (Grid.js) ──
-async function loadAlerts() {
-  const d = await fetchJSON('/api/alerts?limit=50');
-  if (!d) return;
-  makeGrid('tblAlerts',
-    ['Time (UTC)', 'Interval', 'Direction', 'Signal Key', 'Chat ID'],
-    d.map(r => [
-      fmtTime(Number(r.candleCloseTime)),
-      badgeInterval(r.interval),
-      badgeDirection(r.direction),
-      r.signalKey,
-      r.chatId,
-    ])
-  );
-}
-
-// ── Recent Winners (Grid.js) ──
-async function loadWinners() {
-  const d = await fetchJSON('/api/winners?limit=100');
-  if (!d) return;
-  makeGrid('tblWinners',
-    ['Time (UTC)', 'Interval', 'Rank', { name: 'Wallet', sort: false }, 'Shares'],
-    d.map(r => [
-      fmtTime(new Date(r.createdAt)),
-      badgeInterval(r.candleInterval),
-      r.positionRank ? gridjs.html(`<span class="rank-badge">#${r.positionRank}</span>`) : gridjs.html('<span style="color:var(--text3)">—</span>'),
-      profileLink(r.walletAddress, r.displayName),
-      fmtNum(r.positionSize),
-    ])
-  );
 }
 
 // ── Errors (Grid.js) ──
@@ -1216,10 +1097,7 @@ async function loadAll() {
     loadTopWallets(),
     loadLastSignal(),
     loadLeaderboard(),
-    loadPnlLeaderboard(),
     loadSignals(),
-    loadAlerts(),
-    loadWinners(),
     loadErrors(),
     loadDirectionBias(),
     loadMostTargetedInterval(),
