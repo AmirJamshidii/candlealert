@@ -305,6 +305,34 @@
     .period-tab:hover { background: var(--surface2); color: var(--text); }
     .period-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+    /* ── Info tooltip ── */
+    .info-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text3); font-size: 10px; font-weight: 700;
+      cursor: pointer; line-height: 1; flex-shrink: 0;
+      position: relative; user-select: none;
+    }
+    .info-btn:hover { background: var(--surface3); color: var(--text2); }
+    .info-popup {
+      display: none; position: fixed; z-index: 9999;
+      width: 280px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      font-size: 12px; color: var(--text2); line-height: 1.6;
+      text-align: left; white-space: normal;
+    }
+    .info-popup.visible { display: block; }
+    .info-popup h4 {
+      margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--text);
+    }
+    .info-popup ul {
+      margin: 6px 0 0; padding-left: 16px;
+    }
+    .info-popup ul li { margin-bottom: 4px; }
+    .info-popup .score-label { color: var(--primary); font-weight: 600; }
+
     /* ── Top Wallets list ── */
     .top-wallet-row {
       display: flex; align-items: center; gap: 12px;
@@ -418,6 +446,7 @@
           <div class="chart-card-header">
             <span class="material-icons" style="color:var(--yellow)">leaderboard</span>
             Top Wallets
+            <span class="info-btn" id="topWalletsInfoBtn" onclick="toggleTopWalletsInfo(event)">?</span>
             <div class="chart-card-header-right" id="topWalletsTabs">
               <button class="range-tab active" data-days="1" onclick="setTopWalletsDays(1)">24h</button>
               <button class="range-tab" data-days="3" onclick="setTopWalletsDays(3)">72h</button>
@@ -767,6 +796,30 @@ function setPriceInterval(interval) {
   });
   void loadPriceChart();
 }
+
+// ── Top Wallets info popup ──
+function toggleTopWalletsInfo(e) {
+  e.stopPropagation();
+  const popup = document.getElementById('topWalletsInfoPopup');
+  const btn = document.getElementById('topWalletsInfoBtn');
+  const isVisible = popup.classList.contains('visible');
+  popup.classList.remove('visible');
+  if (!isVisible) {
+    const rect = btn.getBoundingClientRect();
+    const popupWidth = 280;
+    let left = rect.right - popupWidth;
+    if (left < 8) left = 8;
+    popup.style.top = (rect.bottom + 8) + 'px';
+    popup.style.left = left + 'px';
+    popup.classList.add('visible');
+  }
+}
+document.addEventListener('click', function(e) {
+  const btn = document.getElementById('topWalletsInfoBtn');
+  if (btn && !btn.contains(e.target)) {
+    document.getElementById('topWalletsInfoPopup').classList.remove('visible');
+  }
+});
 
 // ── Top Wallets list ──
 async function loadTopWallets() {
@@ -1182,5 +1235,18 @@ setInterval(() => {
 
 loadAll();
 </script>
+
+<!-- ── Top Wallets info popup (fixed, outside clipping ancestors) ── -->
+<div class="info-popup" id="topWalletsInfoPopup">
+  <h4>How suspects are scored</h4>
+  Wallets are ranked by a <span class="score-label">Suspect Score</span> combining four signals:
+  <ul>
+    <li><b>30% — Signal appearances:</b> how many reversal signals the wallet appeared in as a top position holder</li>
+    <li><b>30% — BTC dominance ratio:</b> share of their portfolio bet on BTC direction markets vs. other markets</li>
+    <li><b>20% — Total PnL:</b> cumulative profit across all matched signals</li>
+    <li><b>20% — Total wagered:</b> total USDC size of positions held at signal time</li>
+  </ul>
+  Each factor is normalised 0–1 across all candidates, then weighted and summed. Higher score = more suspicious.
+</div>
 </body>
 </html>
