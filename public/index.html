@@ -389,53 +389,19 @@
           <div class="stat-number green" id="totalSignals">—</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label"><span class="material-icons" style="color:var(--primary)">schedule</span> Active Timeframes</div>
-          <div class="intervals-wrap" id="activeIntervals"></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label"><span class="material-icons" style="color:var(--teal)">account_balance_wallet</span> Tracked Wallets</div>
-          <div class="stat-period-tabs" id="walletPeriodTabs">
-            <button class="period-tab active" data-period="today" onclick="setWalletPeriod('today')">Today</button>
-            <button class="period-tab" data-period="1d" onclick="setWalletPeriod('1d')">1D</button>
-            <button class="period-tab" data-period="7d" onclick="setWalletPeriod('7d')">7D</button>
-            <button class="period-tab" data-period="total" onclick="setWalletPeriod('total')">Total</button>
-          </div>
-          <div class="stat-number teal" id="trackedWallets">—</div>
-        </div>
-        <div class="stat-card">
           <div class="stat-label"><span class="material-icons" style="color:var(--yellow)">access_time</span> Last Signal</div>
           <div class="stat-number yellow" id="lastSignalTime" style="font-size:22px;line-height:1.3">—</div>
           <div class="stat-sub" id="lastSignalInterval"></div>
         </div>
-      </div>
-
-      <!-- Second row stat cards -->
-      <div class="stat-grid">
         <div class="stat-card">
           <div class="stat-label"><span class="material-icons" style="color:var(--red)">swap_vert</span> Direction Bias</div>
           <div class="stat-number" id="dirBiasValue">—</div>
           <div class="stat-sub" id="dirBiasSubtitle"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-label"><span class="material-icons" style="color:var(--yellow)">gavel</span> Top Suspect</div>
-          <div class="stat-period-tabs" id="extraStatsPeriodTabs">
-            <button class="period-tab active" data-period="today" onclick="setExtraStatsPeriod('today')">Today</button>
-            <button class="period-tab" data-period="1d" onclick="setExtraStatsPeriod('1d')">1D</button>
-            <button class="period-tab" data-period="7d" onclick="setExtraStatsPeriod('7d')">7D</button>
-            <button class="period-tab" data-period="total" onclick="setExtraStatsPeriod('total')">Total</button>
-          </div>
-          <div class="stat-number" id="topSuspectValue" style="font-size:18px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">—</div>
-          <div class="stat-sub" id="topSuspectSubtitle"></div>
-        </div>
-        <div class="stat-card">
           <div class="stat-label"><span class="material-icons" style="color:var(--primary)">filter_center_focus</span> Most Targeted</div>
           <div class="stat-number blue" id="mostTargetedInterval">—</div>
           <div class="stat-sub" id="mostTargetedSubtitle"></div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label"><span class="material-icons" style="color:var(--yellow)">repeat</span> Repeat Suspects</div>
-          <div class="stat-number yellow" id="repeatSuspectsValue">—</div>
-          <div class="stat-sub" id="repeatSuspectsSubtitle">wallets in 3+ signals</div>
         </div>
       </div>
 
@@ -611,12 +577,9 @@ const grids = {};
 
 // ── Overview state ──
 let signalPeriod = 'today';
-let walletsPeriod = 'today';
 let priceInterval = null;
 let priceChartInstance = null;
 let topWalletsDays = 1;
-let extraStatsPeriod = 'today';
-let extraLeaderboardData = [];
 let dirBiasData = null;
 let signalSummaryData = null;
 
@@ -738,22 +701,6 @@ function setSignalPeriod(period) {
   void loadSignalCount();
 }
 
-// ── Wallet count with period ──
-async function loadWalletCount() {
-  const sinceMs = computeSinceMs(walletsPeriod);
-  const url = sinceMs !== null ? `/api/analytics/holders/count?since=${sinceMs}` : '/api/analytics/holders/count';
-  const d = await fetchJSON(url);
-  if (d == null) return;
-  document.getElementById('trackedWallets').textContent = Number(d.count).toLocaleString();
-}
-
-function setWalletPeriod(period) {
-  walletsPeriod = period;
-  document.querySelectorAll('#walletPeriodTabs .period-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.period === period);
-  });
-  void loadWalletCount();
-}
 
 // ── BTC Live Price chart ──
 async function loadPriceChart() {
@@ -871,7 +818,6 @@ async function loadHealth() {
 async function loadConfig() {
   const d = await fetchJSON('/api/config');
   if (!d) return;
-  document.getElementById('activeIntervals').innerHTML = (d.intervals||[]).map(i => `<span class="chip">${i}</span>`).join('');
   document.getElementById('topbarMeta').textContent = `${d.symbol} · ${(d.intervals||[]).join(', ')}`;
 
   const intervals = d.intervals || [];
@@ -1171,12 +1117,6 @@ async function loadErrors() {
 }
 
 // ── Extra stat cards ──
-function periodToDays(period) {
-  if (period === 'today' || period === '1d') return 1;
-  if (period === '7d') return 7;
-  return 3650;
-}
-
 async function loadDirectionBias() {
   if (!dirBiasData) {
     const d = await fetchJSON('/api/analytics/signals/directions');
@@ -1214,44 +1154,12 @@ async function loadMostTargetedInterval() {
   if (sub) sub.textContent = `${Number(best.count).toLocaleString()} signals total`;
 }
 
-async function loadTopSuspects() {
-  const days = periodToDays(extraStatsPeriod);
-  const d = await fetchJSON(`/api/analytics/wallets/top-suspects?days=${days}&limit=50`);
-  extraLeaderboardData = d || [];
-
-  const topEl = document.getElementById('topSuspectValue');
-  const topSub = document.getElementById('topSuspectSubtitle');
-  if (!extraLeaderboardData.length) {
-    if (topEl) topEl.textContent = '—';
-    if (topSub) topSub.innerHTML = 'no data';
-  } else {
-    const top = extraLeaderboardData[0];
-    const scorePct = Math.round((top.suspectScore ?? 0) * 100);
-    if (topEl) topEl.innerHTML = walletLinkHtml(top.walletAddress, top.displayName);
-    if (topSub) topSub.innerHTML = `${Number(top.signalCount).toLocaleString()} signal${top.signalCount !== 1 ? 's' : ''} &nbsp;<span style="background:rgba(251,188,4,0.15);color:#fbbc04;border:1px solid rgba(251,188,4,0.3);border-radius:8px;padding:2px 8px;font-size:11px;font-weight:500">Score: ${scorePct}%</span>`;
-  }
-
-  const repeatCount = extraLeaderboardData.filter(r => Number(r.signalCount) >= 3).length;
-  const repeatEl = document.getElementById('repeatSuspectsValue');
-  const repeatSub = document.getElementById('repeatSuspectsSubtitle');
-  if (repeatEl) repeatEl.textContent = repeatCount.toLocaleString();
-  if (repeatSub) repeatSub.textContent = `wallets in 3+ signals`;
-}
-
-function setExtraStatsPeriod(period) {
-  extraStatsPeriod = period;
-  document.querySelectorAll('#extraStatsPeriodTabs .period-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.period === period);
-  });
-  void loadTopSuspects();
-}
 
 async function loadAll() {
   await Promise.all([
     loadHealth(),
     loadConfig(),
     loadSignalCount(),
-    loadWalletCount(),
     loadTopWallets(),
     loadLastSignal(),
     loadLeaderboard(),
@@ -1262,7 +1170,6 @@ async function loadAll() {
     loadErrors(),
     loadDirectionBias(),
     loadMostTargetedInterval(),
-    loadTopSuspects(),
   ]);
 }
 
