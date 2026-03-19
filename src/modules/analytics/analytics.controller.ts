@@ -1,5 +1,17 @@
-import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import {
   ErrorLogDto,
@@ -22,19 +34,36 @@ export class AnalyticsController {
   }
 
   @Get('signals/count')
-  @ApiOperation({ summary: 'Total signal count, optionally filtered by a since timestamp' })
-  @ApiQuery({ name: 'since', required: false, type: Number, description: 'Unix ms timestamp — count signals after this time (omit for all-time)' })
+  @ApiOperation({
+    summary: 'Total signal count, optionally filtered by a since timestamp',
+  })
+  @ApiQuery({
+    name: 'since',
+    required: false,
+    type: Number,
+    description:
+      'Unix ms timestamp — count signals after this time (omit for all-time)',
+  })
   @ApiResponse({ status: 200, schema: { example: { count: 123 } } })
   getSignalCount(@Query('since') since?: string) {
-    return this.analyticsService.getSignalCount(since ? parseInt(since, 10) : undefined);
+    return this.analyticsService.getSignalCount(
+      since ? parseInt(since, 10) : undefined,
+    );
   }
 
   @Get('signals/timeline')
   @ApiOperation({ summary: 'Daily signal counts for the last N days' })
-  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Number of days to look back (default 7)' })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Number of days to look back (default 7)',
+  })
   @ApiResponse({ status: 200, type: [SignalTimelineDto] })
   getSignalTimeline(@Query('days') days?: string) {
-    return this.analyticsService.getSignalTimeline(days ? parseInt(days, 10) : 7);
+    return this.analyticsService.getSignalTimeline(
+      days ? parseInt(days, 10) : 7,
+    );
   }
 
   @Get('signals/heatmap')
@@ -45,32 +74,112 @@ export class AnalyticsController {
   }
 
   @Get('signals/directions')
-  @ApiOperation({ summary: 'Signal count by direction (green_to_red / red_to_green) per interval' })
-  @ApiResponse({ status: 200, schema: { example: [{ interval: '5m', direction: 'green_to_red', count: 42 }] } })
+  @ApiOperation({
+    summary:
+      'Signal count by direction (green_to_red / red_to_green) per interval',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: [{ interval: '5m', direction: 'green_to_red', count: 42 }],
+    },
+  })
   getDirectionBreakdown() {
     return this.analyticsService.getDirectionBreakdown();
   }
 
+  @Get('signals/top-scored')
+  @ApiOperation({
+    summary:
+      'Signals ranked by score — strongest/most suspicious reversals first',
+  })
+  @ApiQuery({
+    name: 'minScore',
+    required: false,
+    type: Number,
+    description: 'Minimum signal score 0-100 (default 50)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max results (default 20)',
+  })
+  getHighScoringSignals(
+    @Query('minScore') minScore?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.analyticsService.getHighScoringSignals(
+      minScore ? parseInt(minScore, 10) : 50,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
+  @Get('signals/:signalKey/metrics')
+  @ApiOperation({
+    summary:
+      'Full enriched candle metrics + signal score for a specific signal (served from DB)',
+  })
+  @ApiParam({ name: 'signalKey', example: 'reversal:BTCUSDT:5m:1710000000000' })
+  async getSignalMetrics(@Param('signalKey') signalKey: string) {
+    const metrics = await this.analyticsService.getSignalMetrics(signalKey);
+    if (!metrics)
+      throw new NotFoundException(`No metrics found for signal ${signalKey}`);
+    return metrics;
+  }
+
   @Get('signals/:signalKey/candle')
-  @ApiOperation({ summary: 'OHLCV data for a specific signal, fetched on-demand from Binance' })
+  @ApiOperation({
+    summary: 'OHLCV data for a specific signal (DB first, Binance fallback)',
+  })
   @ApiParam({ name: 'signalKey', example: '5m:1710000000000' })
-  @ApiResponse({ status: 200, schema: { example: { open: 65000, high: 65500, low: 64800, close: 64900, volume: 12.5, bodySize: 100, wickRatio: 0.45 } } })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        open: 65000,
+        high: 65500,
+        low: 64800,
+        close: 64900,
+        volume: 12.5,
+        bodySize: 100,
+        wickRatio: 0.45,
+        signalScore: 74,
+      },
+    },
+  })
   async getCandleForSignal(@Param('signalKey') signalKey: string) {
     const candle = await this.analyticsService.getCandleForSignal(signalKey);
-    if (!candle) throw new NotFoundException(`No candle data found for signal ${signalKey}`);
+    if (!candle)
+      throw new NotFoundException(
+        `No candle data found for signal ${signalKey}`,
+      );
     return candle;
   }
 
   @Get('winners/leaderboard')
   @ApiOperation({ summary: 'Top wallets by cumulative position size' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default 20)' })
-  @ApiQuery({ name: 'interval', required: false, type: String, description: 'Filter by interval (e.g. 5m)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max results (default 20)',
+  })
+  @ApiQuery({
+    name: 'interval',
+    required: false,
+    type: String,
+    description: 'Filter by interval (e.g. 5m)',
+  })
   @ApiResponse({ status: 200, type: [WinnerLeaderboardDto] })
   getWinnerLeaderboard(
     @Query('limit') limit?: string,
     @Query('interval') interval?: string,
   ) {
-    return this.analyticsService.getWinnerLeaderboard(limit ? parseInt(limit, 10) : 20, interval);
+    return this.analyticsService.getWinnerLeaderboard(
+      limit ? parseInt(limit, 10) : 20,
+      interval,
+    );
   }
 
   @Get('winners/by-signal/:signalKey')
@@ -82,27 +191,89 @@ export class AnalyticsController {
   }
 
   @Get('holders/count')
-  @ApiOperation({ summary: 'Count of distinct holder wallets, optionally filtered by a since timestamp' })
-  @ApiQuery({ name: 'since', required: false, type: Number, description: 'Unix ms timestamp — count wallets after this time (omit for all-time)' })
+  @ApiOperation({
+    summary:
+      'Count of distinct holder wallets, optionally filtered by a since timestamp',
+  })
+  @ApiQuery({
+    name: 'since',
+    required: false,
+    type: Number,
+    description:
+      'Unix ms timestamp — count wallets after this time (omit for all-time)',
+  })
   @ApiResponse({ status: 200, schema: { example: { count: 42 } } })
   getHolderCount(@Query('since') since?: string) {
-    return this.analyticsService.getHolderCount(since ? parseInt(since, 10) : undefined);
+    return this.analyticsService.getHolderCount(
+      since ? parseInt(since, 10) : undefined,
+    );
   }
 
   @Get('btc/candles')
-  @ApiOperation({ summary: 'Recent BTC/USDT candlestick data with signal markers' })
-  @ApiQuery({ name: 'interval', required: false, type: String, description: 'Candle interval (default 5m)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of candles (default 200)' })
-  @ApiResponse({ status: 200, schema: { example: { candles: [{ time: 1710000000, open: 65000, high: 65500, low: 64800, close: 64900 }], signals: [{ time: 1710000000, direction: 'green_to_red' }] } } })
-  getBtcCandles(@Query('interval') interval?: string, @Query('limit') limit?: string) {
-    return this.analyticsService.getBtcCandles(interval ?? '5m', limit ? parseInt(limit, 10) : 200);
+  @ApiOperation({
+    summary: 'Recent BTC/USDT candlestick data with signal markers',
+  })
+  @ApiQuery({
+    name: 'interval',
+    required: false,
+    type: String,
+    description: 'Candle interval (default 5m)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of candles (default 200)',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        candles: [
+          {
+            time: 1710000000,
+            open: 65000,
+            high: 65500,
+            low: 64800,
+            close: 64900,
+          },
+        ],
+        signals: [{ time: 1710000000, direction: 'green_to_red' }],
+      },
+    },
+  })
+  getBtcCandles(
+    @Query('interval') interval?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.analyticsService.getBtcCandles(
+      interval ?? '5m',
+      limit ? parseInt(limit, 10) : 200,
+    );
   }
 
   @Get('holders/leaderboard')
-  @ApiOperation({ summary: 'Top holders by appearances + total position over a time window' })
-  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Lookback window in days (default 30)' })
-  @ApiQuery({ name: 'interval', required: false, type: String, description: 'Filter by interval (e.g. 5m)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default 20)' })
+  @ApiOperation({
+    summary: 'Top holders by appearances + total position over a time window',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Lookback window in days (default 30)',
+  })
+  @ApiQuery({
+    name: 'interval',
+    required: false,
+    type: String,
+    description: 'Filter by interval (e.g. 5m)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max results (default 20)',
+  })
   @ApiResponse({ status: 200, type: [HolderLeaderboardDto] })
   getHolderLeaderboard(
     @Query('days') days?: string,
@@ -117,11 +288,41 @@ export class AnalyticsController {
   }
 
   @Get('wallets/leaderboard')
-  @ApiOperation({ summary: 'Top wallets by avg PnL across signals (requires position PnL data)' })
-  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Lookback window in days (default 30)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default 20)' })
-  @ApiQuery({ name: 'minAppearances', required: false, type: Number, description: 'Min signal appearances (default 3)' })
-  @ApiResponse({ status: 200, schema: { example: [{ walletAddress: '0xabc', appearances: 5, avgPnl: 120.5, totalPnl: 602.5 }] } })
+  @ApiOperation({
+    summary:
+      'Top wallets by avg PnL across signals (requires position PnL data)',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Lookback window in days (default 30)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max results (default 20)',
+  })
+  @ApiQuery({
+    name: 'minAppearances',
+    required: false,
+    type: Number,
+    description: 'Min signal appearances (default 3)',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: [
+        {
+          walletAddress: '0xabc',
+          appearances: 5,
+          avgPnl: 120.5,
+          totalPnl: 602.5,
+        },
+      ],
+    },
+  })
   getWinRateLeaderboard(
     @Query('days') days?: string,
     @Query('limit') limit?: string,
@@ -135,13 +336,23 @@ export class AnalyticsController {
   }
 
   @Get('wallets/top-suspects')
-  @ApiOperation({ summary: 'Top suspect wallets ranked by composite score (signals + BTC focus + PnL + position size)' })
-  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Lookback window in days (default 30)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Candidate pool size (default 50)' })
-  getTopSuspects(
-    @Query('days') days?: string,
-    @Query('limit') limit?: string,
-  ) {
+  @ApiOperation({
+    summary:
+      'Top suspect wallets ranked by composite score (signals + BTC focus + PnL + position size)',
+  })
+  @ApiQuery({
+    name: 'days',
+    required: false,
+    type: Number,
+    description: 'Lookback window in days (default 30)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Candidate pool size (default 50)',
+  })
+  getTopSuspects(@Query('days') days?: string, @Query('limit') limit?: string) {
     return this.analyticsService.getTopSuspects(
       days ? parseInt(days, 10) : 30,
       limit ? parseInt(limit, 10) : 50,
@@ -149,12 +360,27 @@ export class AnalyticsController {
   }
 
   @Get('wallets/:address/profile')
-  @ApiOperation({ summary: 'Polymarket portfolio profile for a wallet address' })
+  @ApiOperation({
+    summary: 'Polymarket portfolio profile for a wallet address',
+  })
   @ApiParam({ name: 'address', example: '0xabc123' })
-  @ApiResponse({ status: 200, schema: { example: { walletAddress: '0xabc', totalPositions: 15, totalCurrentValue: 5200, totalRealizedPnl: 320, btcUpdownPositions: 4, favoriteCategories: [{ category: 'btc', count: 4 }] } } })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        walletAddress: '0xabc',
+        totalPositions: 15,
+        totalCurrentValue: 5200,
+        totalRealizedPnl: 320,
+        btcUpdownPositions: 4,
+        favoriteCategories: [{ category: 'btc', count: 4 }],
+      },
+    },
+  })
   async getWalletProfile(@Param('address') address: string) {
     const profile = await this.analyticsService.getWalletProfile(address);
-    if (!profile) throw new NotFoundException(`Could not fetch profile for ${address}`);
+    if (!profile)
+      throw new NotFoundException(`Could not fetch profile for ${address}`);
     return profile;
   }
 
@@ -168,13 +394,23 @@ export class AnalyticsController {
 
   @Get('errors')
   @ApiOperation({ summary: 'Error logs with optional module filter' })
-  @ApiQuery({ name: 'module', required: false, type: String, description: 'Filter by module name (e.g. alert)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max results (default 50)' })
+  @ApiQuery({
+    name: 'module',
+    required: false,
+    type: String,
+    description: 'Filter by module name (e.g. alert)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max results (default 50)',
+  })
   @ApiResponse({ status: 200, type: [ErrorLogDto] })
-  getErrors(
-    @Query('module') module?: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.analyticsService.getErrors(limit ? parseInt(limit, 10) : 50, module);
+  getErrors(@Query('module') module?: string, @Query('limit') limit?: string) {
+    return this.analyticsService.getErrors(
+      limit ? parseInt(limit, 10) : 50,
+      module,
+    );
   }
 }

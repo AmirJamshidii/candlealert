@@ -14,7 +14,9 @@ export class PolymarketWinnerRepository {
     await this.repo.save(winners);
   }
 
-  async getRecentBySignal(signalKey: string): Promise<PolymarketWinnerEntity[]> {
+  async getRecentBySignal(
+    signalKey: string,
+  ): Promise<PolymarketWinnerEntity[]> {
     return this.repo.find({
       where: { signalKey },
       order: { positionSize: 'DESC' },
@@ -28,7 +30,14 @@ export class PolymarketWinnerRepository {
   async getLeaderboard(
     limit: number,
     interval?: string,
-  ): Promise<{ walletAddress: string; displayName: string | null; totalPosition: number; signalCount: number }[]> {
+  ): Promise<
+    {
+      walletAddress: string;
+      displayName: string | null;
+      totalPosition: number;
+      signalCount: number;
+    }[]
+  > {
     const rows = await this.repo.manager.query(
       `SELECT wallet_address AS "walletAddress",
               MAX(display_name) AS "displayName",
@@ -53,7 +62,14 @@ export class PolymarketWinnerRepository {
     days: number,
     limit: number,
     interval?: string,
-  ): Promise<{ walletAddress: string; displayName: string | null; signalCount: number; totalPosition: number }[]> {
+  ): Promise<
+    {
+      walletAddress: string;
+      displayName: string | null;
+      signalCount: number;
+      totalPosition: number;
+    }[]
+  > {
     const rows = await this.repo.manager.query(
       `SELECT wallet_address AS "walletAddress",
               MAX(display_name) AS "displayName",
@@ -75,7 +91,9 @@ export class PolymarketWinnerRepository {
     }));
   }
 
-  async getHolderHistory(walletAddress: string): Promise<PolymarketWinnerEntity[]> {
+  async getHolderHistory(
+    walletAddress: string,
+  ): Promise<PolymarketWinnerEntity[]> {
     return this.repo.find({
       where: { walletAddress },
       order: { createdAt: 'DESC' },
@@ -101,14 +119,16 @@ export class PolymarketWinnerRepository {
   async getTopSuspects(
     days: number,
     limit: number,
-  ): Promise<{
-    walletAddress: string;
-    displayName: string | null;
-    signalCount: number;
-    totalWagered: number;
-    totalPnl: number;
-    btcRatio: number;
-  }[]> {
+  ): Promise<
+    {
+      walletAddress: string;
+      displayName: string | null;
+      signalCount: number;
+      totalWagered: number;
+      totalPnl: number;
+      btcRatio: number;
+    }[]
+  > {
     const rows = await this.repo.manager.query(
       `SELECT pw.wallet_address AS "walletAddress",
               COALESCE(MAX(wp.display_name), MAX(pw.display_name)) AS "displayName",
@@ -138,11 +158,68 @@ export class PolymarketWinnerRepository {
     }));
   }
 
+  async getTopSuspectsPersisted(
+    days: number,
+    limit: number,
+  ): Promise<
+    {
+      walletAddress: string;
+      displayName: string | null;
+      signalCount: number;
+      totalWagered: number;
+      totalPnl: number;
+      btcRatio: number;
+      winRate: number;
+      suspectScore: number;
+    }[]
+  > {
+    const rows = await this.repo.manager.query(
+      `SELECT pw.wallet_address AS "walletAddress",
+              COALESCE(MAX(wp.display_name), MAX(pw.display_name)) AS "displayName",
+              COUNT(DISTINCT pw.signal_key)::int AS "signalCount",
+              SUM(pw.position_size::numeric) AS "totalWagered",
+              COALESCE(SUM(pw.total_pnl::numeric), 0) AS "totalPnl",
+              COALESCE(
+                CASE WHEN MAX(wp.total_positions) > 0
+                  THEN MAX(wp.btc_updown_positions)::numeric / MAX(wp.total_positions)
+                  ELSE 0
+                END, 0
+              ) AS "btcRatio",
+              COALESCE(wp.win_rate::numeric, 0) AS "winRate",
+              COALESCE(wp.suspect_score::numeric, 0) AS "suspectScore"
+       FROM polymarket_winners pw
+       LEFT JOIN wallet_profiles wp ON pw.wallet_address = wp.wallet_address
+       WHERE pw.created_at >= NOW() - ($1 || ' days')::interval
+       GROUP BY pw.wallet_address, wp.win_rate, wp.suspect_score
+       ORDER BY COALESCE(wp.suspect_score::numeric, 0) DESC
+       LIMIT $2`,
+      [days, limit],
+    );
+    return rows.map((r: Record<string, string>) => ({
+      walletAddress: r.walletAddress,
+      displayName: r.displayName ?? null,
+      signalCount: parseInt(r.signalCount, 10),
+      totalWagered: parseFloat(r.totalWagered ?? '0'),
+      totalPnl: parseFloat(r.totalPnl ?? '0'),
+      btcRatio: parseFloat(r.btcRatio ?? '0'),
+      winRate: parseFloat(r.winRate ?? '0'),
+      suspectScore: parseFloat(r.suspectScore ?? '0'),
+    }));
+  }
+
   async getWinRateLeaderboard(
     days: number,
     limit: number,
     minAppearances = 3,
-  ): Promise<{ walletAddress: string; displayName: string | null; appearances: number; avgPnl: number; totalPnl: number }[]> {
+  ): Promise<
+    {
+      walletAddress: string;
+      displayName: string | null;
+      appearances: number;
+      avgPnl: number;
+      totalPnl: number;
+    }[]
+  > {
     const rows = await this.repo.manager.query(
       `SELECT wallet_address AS "walletAddress",
               MAX(display_name) AS "displayName",

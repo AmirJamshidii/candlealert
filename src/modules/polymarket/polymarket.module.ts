@@ -14,7 +14,15 @@ import { ConfigModule } from '../../config/config.module';
     TypeOrmModule.forFeature([PolymarketWinnerEntity, WalletProfileEntity]),
     ConfigModule,
   ],
-  providers: [PolymarketService, PolymarketWinnerRepository, WalletProfileRepository],
-  exports: [PolymarketService, PolymarketWinnerRepository, WalletProfileRepository],
+  providers: [
+    PolymarketService,
+    PolymarketWinnerRepository,
+    WalletProfileRepository,
+  ],
+  exports: [
+    PolymarketService,
+    PolymarketWinnerRepository,
+    WalletProfileRepository,
+  ],
 })
 export class PolymarketModule {}

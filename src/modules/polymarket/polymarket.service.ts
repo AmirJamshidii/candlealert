@@ -53,7 +53,7 @@ export class PolymarketService {
     private readonly winnerRepo: PolymarketWinnerRepository,
     private readonly walletProfileRepo: WalletProfileRepository,
     private readonly errorLogService: ErrorLogService,
-  ) { }
+  ) {}
 
   async handleSignal(
     signalKey: string,
@@ -63,9 +63,14 @@ export class PolymarketService {
     direction: ReversalDirection = 'green_to_red',
   ): Promise<{ holders: IWinner[]; positions: IPosition[] }> {
     try {
-      const { conditionId, question } = await this.findMarket(interval, openTime);
+      const { conditionId, question } = await this.findMarket(
+        interval,
+        openTime,
+      );
       if (!conditionId) {
-        this.logger.warn(`No Polymarket market found for btc-updown-${interval}-${Math.floor(openTime / 1000)}`);
+        this.logger.warn(
+          `No Polymarket market found for btc-updown-${interval}-${Math.floor(openTime / 1000)}`,
+        );
         return { holders: [], positions: [] };
       }
 
@@ -74,9 +79,22 @@ export class PolymarketService {
       const outcomeSide = direction === 'green_to_red' ? 'Down' : 'Up';
 
       const [holders, positions] = await Promise.all([
-        this.getTopHolders(conditionId, question, signalKey, interval, closeTime, outcomeIndex, outcomeSide),
+        this.getTopHolders(
+          conditionId,
+          question,
+          signalKey,
+          interval,
+          closeTime,
+          outcomeIndex,
+          outcomeSide,
+        ),
         this.getTopPositionsByPnl(conditionId, question, outcomeIndex),
       ]);
+
+      void this.recomputeSuspectScores().catch((err) =>
+        this.errorLogService.log(err, { module: 'suspect-scoring' }),
+      );
+
       return { holders, positions };
     } catch (err) {
       this.errorLogService.log(err, { module: 'polymarket' });
@@ -93,7 +111,10 @@ export class PolymarketService {
     }
   }
 
-  private async findMarket(interval: string, openTime: number): Promise<{ conditionId: string; question: string; closed: boolean }> {
+  private async findMarket(
+    interval: string,
+    openTime: number,
+  ): Promise<{ conditionId: string; question: string; closed: boolean }> {
     const slug = `btc-updown-${interval}-${Math.floor(openTime / 1000)}`;
     this.logger.log(`Fetching Polymarket market: ${slug}`);
 
@@ -106,18 +127,35 @@ export class PolymarketService {
           timeout: 10_000,
         }),
       );
-      this.logger.log(`[API] GET ${url} → status=${res.status} | events=${Array.isArray(res.data) ? res.data.length : 1}`);
+      this.logger.log(
+        `[API] GET ${url} → status=${res.status} | events=${Array.isArray(res.data) ? res.data.length : 1}`,
+      );
 
-      const events: Array<{ markets?: Array<{ conditionId: string; question: string; closed?: boolean; resolved?: boolean; active?: boolean }> }> =
-        Array.isArray(res.data) ? res.data : [res.data];
+      const events: Array<{
+        markets?: Array<{
+          conditionId: string;
+          question: string;
+          closed?: boolean;
+          resolved?: boolean;
+          active?: boolean;
+        }>;
+      }> = Array.isArray(res.data) ? res.data : [res.data];
 
       const market = events[0]?.markets?.[0];
-      if (!market?.conditionId) return { conditionId: '', question: '', closed: false };
+      if (!market?.conditionId)
+        return { conditionId: '', question: '', closed: false };
 
       // Polymarket markets are closed when closed=true or resolved=true or active=false
-      const closed = market.closed === true || market.resolved === true || market.active === false;
+      const closed =
+        market.closed === true ||
+        market.resolved === true ||
+        market.active === false;
       this.logger.log(`conditionId: ${market.conditionId} | closed=${closed}`);
-      return { conditionId: market.conditionId, question: market.question ?? slug, closed };
+      return {
+        conditionId: market.conditionId,
+        question: market.question ?? slug,
+        closed,
+      };
     } catch (err) {
       this.logger.error(`[API] GET ${url} → FAILED`, err);
       return { conditionId: '', question: '', closed: false };
@@ -134,7 +172,9 @@ export class PolymarketService {
     outcomeSide: string,
   ): Promise<IWinner[]> {
     const holdersUrl = `${this.appConfig.polymarketDataUrl}/holders`;
-    this.logger.log(`[API] GET ${holdersUrl} | params: ${JSON.stringify({ market: conditionId, limit: 500 })}`);
+    this.logger.log(
+      `[API] GET ${holdersUrl} | params: ${JSON.stringify({ market: conditionId, limit: 500 })}`,
+    );
     try {
       const res = await firstValueFrom(
         this.httpService.get(holdersUrl, {
@@ -142,18 +182,28 @@ export class PolymarketService {
           timeout: 15_000,
         }),
       );
-      this.logger.log(`[API] GET ${holdersUrl} → status=${res.status} | groups=${Array.isArray(res.data) ? res.data.length : 0}`);
+      this.logger.log(
+        `[API] GET ${holdersUrl} → status=${res.status} | groups=${Array.isArray(res.data) ? res.data.length : 0}`,
+      );
 
-      const groups: PolymarketTokenGroup[] = Array.isArray(res.data) ? res.data : [];
+      const groups: PolymarketTokenGroup[] = Array.isArray(res.data)
+        ? res.data
+        : [];
 
-      const group = groups.find((g) => g.holders?.[0]?.outcomeIndex === outcomeIndex);
+      const group = groups.find(
+        (g) => g.holders?.[0]?.outcomeIndex === outcomeIndex,
+      );
       if (!group?.holders?.length) {
-        this.logger.warn(`No ${outcomeSide} holders found for market ${conditionId}`);
+        this.logger.warn(
+          `No ${outcomeSide} holders found for market ${conditionId}`,
+        );
         return [];
       }
 
       const top = group.holders.slice(0, this.appConfig.polymarketWinnerCount);
-      this.logger.log(`Top ${outcomeSide} holders fetched: ${top.length} (of ${group.holders.length} total)`);
+      this.logger.log(
+        `Top ${outcomeSide} holders fetched: ${top.length} (of ${group.holders.length} total)`,
+      );
 
       // Store in DB
       await this.winnerRepo.saveAll(
@@ -173,7 +223,10 @@ export class PolymarketService {
 
       // Fetch and store wallet profiles for top holders in background (non-blocking)
       void this.fetchAndStoreWalletProfiles(
-        top.map(h => ({ walletAddress: h.proxyWallet, name: h.name || h.pseudonym || null })),
+        top.map((h) => ({
+          walletAddress: h.proxyWallet,
+          name: h.name || h.pseudonym || null,
+        })),
       );
 
       return top.map((h) => ({
@@ -188,20 +241,29 @@ export class PolymarketService {
     }
   }
 
-  private async fetchAndStoreWalletProfiles(holders: { walletAddress: string; name: string | null }[]): Promise<void> {
+  private async fetchAndStoreWalletProfiles(
+    holders: { walletAddress: string; name: string | null }[],
+  ): Promise<void> {
     const profiles = await Promise.all(
-      holders.map(h => this.fetchWalletProfile(h.walletAddress, h.name).catch(() => null)),
+      holders.map((h) =>
+        this.fetchWalletProfile(h.walletAddress, h.name).catch(() => null),
+      ),
     );
     const valid = profiles.filter(Boolean);
     if (valid.length) {
-      await this.walletProfileRepo.upsertMany(valid).catch(err =>
-        this.errorLogService.log(err, { module: 'polymarket-profiles' }),
-      );
+      await this.walletProfileRepo
+        .upsertMany(valid)
+        .catch((err) =>
+          this.errorLogService.log(err, { module: 'polymarket-profiles' }),
+        );
       this.logger.log(`Stored ${valid.length} wallet profiles`);
     }
   }
 
-  private async fetchWalletProfile(address: string, name: string | null = null): Promise<{
+  private async fetchWalletProfile(
+    address: string,
+    name: string | null = null,
+  ): Promise<{
     walletAddress: string;
     displayName: string | null;
     totalPositions: number;
@@ -214,14 +276,27 @@ export class PolymarketService {
     const url = `${this.appConfig.polymarketDataUrl}/positions`;
     try {
       const res = await firstValueFrom(
-        this.httpService.get(url, { params: { user: address, limit: 500 }, timeout: 15_000 }),
+        this.httpService.get(url, {
+          params: { user: address, limit: 500 },
+          timeout: 15_000,
+        }),
       );
-      const positions: PolymarketUserPosition[] = Array.isArray(res.data) ? res.data : [];
+      const positions: PolymarketUserPosition[] = Array.isArray(res.data)
+        ? res.data
+        : [];
 
-      const totalCurrentValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
-      const totalRealizedPnl = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
+      const totalCurrentValue = positions.reduce(
+        (s, p) => s + (p.currentValue ?? 0),
+        0,
+      );
+      const totalRealizedPnl = positions.reduce(
+        (s, p) => s + (p.realizedPnl ?? 0),
+        0,
+      );
       const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
-      const btcUpdownPositions = positions.filter(p => p.eventSlug?.startsWith('btc-updown')).length;
+      const btcUpdownPositions = positions.filter((p) =>
+        p.eventSlug?.startsWith('btc-updown'),
+      ).length;
 
       const categoryCounts: Record<string, number> = {};
       for (const p of positions) {
@@ -249,11 +324,64 @@ export class PolymarketService {
     }
   }
 
-  private async getTopPositionsByPnl(conditionId: string, marketQuestion: string, outcomeIndex: number): Promise<IPosition[]> {
+  private async recomputeSuspectScores(): Promise<void> {
+    const raw = await this.walletProfileRepo.getAllForScoring();
+    if (!raw.length) return;
+
+    const norm = (val: number, min: number, max: number) =>
+      max === min ? 1 : (val - min) / (max - min);
+
+    const fields = [
+      'signalCount',
+      'winRate',
+      'btcRatio',
+      'totalPnl',
+      'totalWagered',
+    ] as const;
+    const mins = Object.fromEntries(
+      fields.map((f) => [f, Math.min(...raw.map((r) => r[f]))]),
+    );
+    const maxs = Object.fromEntries(
+      fields.map((f) => [f, Math.max(...raw.map((r) => r[f]))]),
+    );
+
+    const updates = raw.map((r) => {
+      const score =
+        0.25 * norm(r.signalCount, mins.signalCount, maxs.signalCount) +
+        0.25 * norm(r.winRate, mins.winRate, maxs.winRate) +
+        0.2 * norm(r.btcRatio, mins.btcRatio, maxs.btcRatio) +
+        0.15 * norm(r.totalPnl, mins.totalPnl, maxs.totalPnl) +
+        0.15 * norm(r.totalWagered, mins.totalWagered, maxs.totalWagered);
+
+      return {
+        walletAddress: r.walletAddress,
+        suspectScore: String(Math.round(score * 100) / 100),
+        winRate: String(Math.round(r.winRate * 100) / 100),
+        signalCount: r.signalCount,
+        totalWagered: String(r.totalWagered),
+      };
+    });
+
+    await this.walletProfileRepo.updateSuspectScores(updates);
+    this.logger.log(`Suspect scores recomputed for ${updates.length} wallets`);
+  }
+
+  private async getTopPositionsByPnl(
+    conditionId: string,
+    marketQuestion: string,
+    outcomeIndex: number,
+  ): Promise<IPosition[]> {
     const side = outcomeIndex === 1 ? 'Down' : 'Up';
     const positionsUrl = `${this.appConfig.polymarketDataUrl}/v1/market-positions`;
-    const positionsParams = { market: conditionId, limit: 500, sortBy: 'TOTAL_PNL', sortDirection: 'DESC' };
-    this.logger.log(`[API] GET ${positionsUrl} | params: ${JSON.stringify(positionsParams)}`);
+    const positionsParams = {
+      market: conditionId,
+      limit: 500,
+      sortBy: 'TOTAL_PNL',
+      sortDirection: 'DESC',
+    };
+    this.logger.log(
+      `[API] GET ${positionsUrl} | params: ${JSON.stringify(positionsParams)}`,
+    );
     try {
       const res = await firstValueFrom(
         this.httpService.get(positionsUrl, {
@@ -261,13 +389,21 @@ export class PolymarketService {
           timeout: 15_000,
         }),
       );
-      this.logger.log(`[API] GET ${positionsUrl} → status=${res.status} | groups=${Array.isArray(res.data) ? res.data.length : 0}`);
+      this.logger.log(
+        `[API] GET ${positionsUrl} → status=${res.status} | groups=${Array.isArray(res.data) ? res.data.length : 0}`,
+      );
 
-      const groups: PolymarketPositionGroup[] = Array.isArray(res.data) ? res.data : [];
+      const groups: PolymarketPositionGroup[] = Array.isArray(res.data)
+        ? res.data
+        : [];
 
-      const group = groups.find((g) => g.positions?.[0]?.outcomeIndex === outcomeIndex);
+      const group = groups.find(
+        (g) => g.positions?.[0]?.outcomeIndex === outcomeIndex,
+      );
       if (!group?.positions?.length) {
-        this.logger.warn(`No ${side} positions found for market ${conditionId}`);
+        this.logger.warn(
+          `No ${side} positions found for market ${conditionId}`,
+        );
         return [];
       }
 
@@ -275,7 +411,9 @@ export class PolymarketService {
         .filter((p) => p.totalPnl > 0)
         .slice(0, this.appConfig.polymarketWinnerCount);
 
-      this.logger.log(`Top ${side} positions by PNL fetched: ${top.length} (of ${group.positions.length} total, filtered positive PNL)`);
+      this.logger.log(
+        `Top ${side} positions by PNL fetched: ${top.length} (of ${group.positions.length} total, filtered positive PNL)`,
+      );
 
       return top.map((p) => ({
         walletAddress: p.proxyWallet,

@@ -20,7 +20,9 @@ export const configValidationSchema = Joi.object({
   TELEGRAM_CHAT_ID: Joi.string().required(),
 
   // Polymarket
-  POLYMARKET_GAMMA_URL: Joi.string().default('https://gamma-api.polymarket.com'),
+  POLYMARKET_GAMMA_URL: Joi.string().default(
+    'https://gamma-api.polymarket.com',
+  ),
   POLYMARKET_DATA_URL: Joi.string().default('https://data-api.polymarket.com'),
   POLYMARKET_WINNER_COUNT: Joi.number().integer().min(1).max(50).default(10),
 
@@ -32,6 +34,10 @@ export const configValidationSchema = Joi.object({
 
   // App
   PORT: Joi.number().default(3000),
-  NODE_ENV: Joi.string().valid('development', 'production', 'test').default('production'),
-  LOG_LEVEL: Joi.string().valid('debug', 'info', 'warn', 'error').default('info'),
+  NODE_ENV: Joi.string()
+    .valid('development', 'production', 'test')
+    .default('production'),
+  LOG_LEVEL: Joi.string()
+    .valid('debug', 'info', 'warn', 'error')
+    .default('info'),
 });

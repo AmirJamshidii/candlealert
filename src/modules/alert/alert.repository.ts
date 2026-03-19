@@ -15,8 +15,22 @@ export class AlertRepository {
     return count > 0;
   }
 
-  async record(signalKey: string, chatId: string, interval: string, candleCloseTime: number, direction?: string, polymarketUrl?: string): Promise<void> {
-    await this.repo.save({ signalKey, chatId, interval, candleCloseTime: String(candleCloseTime), direction: direction ?? null, polymarketUrl: polymarketUrl ?? null });
+  async record(
+    signalKey: string,
+    chatId: string,
+    interval: string,
+    candleCloseTime: number,
+    direction?: string,
+    polymarketUrl?: string,
+  ): Promise<void> {
+    await this.repo.save({
+      signalKey,
+      chatId,
+      interval,
+      candleCloseTime: String(candleCloseTime),
+      direction: direction ?? null,
+      polymarketUrl: polymarketUrl ?? null,
+    });
   }
 
   async getRecent(limit = 100): Promise<AlertEntity[]> {
@@ -51,7 +65,9 @@ export class AlertRepository {
     );
   }
 
-  async getDirectionBreakdown(): Promise<{ interval: string; direction: string; count: number }[]> {
+  async getDirectionBreakdown(): Promise<
+    { interval: string; direction: string; count: number }[]
+  > {
     return this.repo.manager.query(
       `SELECT interval, COALESCE(direction, 'unknown') AS direction, COUNT(*)::int AS count
        FROM alerts
@@ -68,7 +84,9 @@ export class AlertRepository {
       );
       return parseInt(rows[0].count, 10);
     }
-    const rows = await this.repo.manager.query(`SELECT COUNT(*)::int AS count FROM alerts`);
+    const rows = await this.repo.manager.query(
+      `SELECT COUNT(*)::int AS count FROM alerts`,
+    );
     return parseInt(rows[0].count, 10);
   }
 

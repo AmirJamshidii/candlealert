@@ -12,21 +12,21 @@ export interface ICandle {
 }
 
 export interface IBinanceKlineRaw {
-  t: number;   // kline start time
-  T: number;   // kline close time
-  s: string;   // symbol
-  i: string;   // interval
-  o: string;   // open
-  c: string;   // close
-  h: string;   // high
-  l: string;   // low
-  v: string;   // volume
-  x: boolean;  // is kline closed
+  t: number; // kline start time
+  T: number; // kline close time
+  s: string; // symbol
+  i: string; // interval
+  o: string; // open
+  c: string; // close
+  h: string; // high
+  l: string; // low
+  v: string; // volume
+  x: boolean; // is kline closed
 }
 
 export interface IBinanceKlineWsMessage {
   e: 'kline';
-  E: number;   // event time
-  s: string;   // symbol
+  E: number; // event time
+  s: string; // symbol
   k: IBinanceKlineRaw;
 }

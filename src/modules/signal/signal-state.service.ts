@@ -9,10 +9,20 @@ export class SignalStateService {
     return `${interval}:${openTime}`;
   }
 
-  snapshot(interval: string, openTime: number, wasGreen: boolean, closeAtSnapshot: number): void {
+  snapshot(
+    interval: string,
+    openTime: number,
+    wasGreen: boolean,
+    closeAtSnapshot: number,
+  ): void {
     const k = this.key(interval, openTime);
     if (!this.snapshots.has(k)) {
-      this.snapshots.set(k, { wasGreen, recorded: true, openTime, closeAtSnapshot });
+      this.snapshots.set(k, {
+        wasGreen,
+        recorded: true,
+        openTime,
+        closeAtSnapshot,
+      });
     }
   }
 

@@ -35,7 +35,9 @@ async function buildApp() {
 }
 
 async function truncateAll(ds: DataSource) {
-  await ds.query(`TRUNCATE alerts, polymarket_winners, error_logs RESTART IDENTITY CASCADE`);
+  await ds.query(
+    `TRUNCATE alerts, polymarket_winners, wallet_profiles, signal_metrics, error_logs RESTART IDENTITY CASCADE`,
+  );
 }
 
 // ── Suite 1: Seeded data (happy paths + ordering + pagination) ────────────────
@@ -89,8 +91,12 @@ describe('Analytics API (e2e)', () => {
         .expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
-      const fiveMin = res.body.find((r: { interval: string }) => r.interval === '5m');
-      const fifteenMin = res.body.find((r: { interval: string }) => r.interval === '15m');
+      const fiveMin = res.body.find(
+        (r: { interval: string }) => r.interval === '5m',
+      );
+      const fifteenMin = res.body.find(
+        (r: { interval: string }) => r.interval === '15m',
+      );
       expect(fiveMin?.count).toBe(2);
       expect(fifteenMin?.count).toBe(1);
     });
@@ -128,7 +134,7 @@ describe('Analytics API (e2e)', () => {
       expect(Array.isArray(res.body)).toBe(true);
     });
 
-    it('days=1 includes today\'s seeded alerts', async () => {
+    it("days=1 includes today's seeded alerts", async () => {
       const res = await request(app.getHttpServer())
         .get('/api/analytics/signals/timeline?days=1')
         .expect(200);
@@ -136,7 +142,10 @@ describe('Analytics API (e2e)', () => {
       // All seeded alerts have sent_at = NOW(), so they fall within a 1-day window
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBeGreaterThan(0);
-      const total = res.body.reduce((sum: number, r: { count: number }) => sum + r.count, 0);
+      const total = res.body.reduce(
+        (sum: number, r: { count: number }) => sum + r.count,
+        0,
+      );
       expect(total).toBe(3);
     });
 
@@ -181,7 +190,9 @@ describe('Analytics API (e2e)', () => {
         .get('/api/analytics/winners/leaderboard?interval=5m')
         .expect(200);
 
-      const wallets = res.body.map((r: { walletAddress: string }) => r.walletAddress);
+      const wallets = res.body.map(
+        (r: { walletAddress: string }) => r.walletAddress,
+      );
       expect(wallets).toContain('0xabc');
     });
 
@@ -342,6 +353,74 @@ describe('Analytics API (e2e)', () => {
       expect(err).toHaveProperty('message');
       expect(err).toHaveProperty('createdAt');
     });
+  });
+});
+
+// ── Suite 1b: wallets/top-suspects with persisted scores ─────────────────────
+
+describe('GET /api/analytics/wallets/top-suspects (e2e)', () => {
+  let app: INestApplication;
+  let dataSource: DataSource;
+
+  beforeAll(async () => {
+    ({ app, dataSource } = await buildApp());
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  beforeEach(async () => {
+    await dataSource.query(`
+      INSERT INTO polymarket_winners
+        (signal_key, market_id, market_question, wallet_address, position_size, outcome_side, candle_interval, candle_close_time, total_pnl)
+      VALUES
+        ('5m:1000', 'mkt1', 'Q', '0xsuspect1', 500, 'Down', '5m', 1000, 200),
+        ('5m:2000', 'mkt2', 'Q', '0xsuspect1', 400, 'Down', '5m', 2000, 150),
+        ('5m:1000', 'mkt1', 'Q', '0xsuspect2', 100, 'Down', '5m', 1000, 50)
+    `);
+    await dataSource.query(`
+      INSERT INTO wallet_profiles
+        (wallet_address, total_positions, total_current_value, total_realized_pnl, total_cash_pnl, btc_updown_positions, favorite_categories, suspect_score, win_rate, signal_count, total_wagered)
+      VALUES
+        ('0xsuspect1', 10, 1000, 350, 0, 8, '[]', 0.85, 1.0, 2, 900),
+        ('0xsuspect2', 5,  500,   50, 0, 2, '[]', 0.30, 1.0, 1, 100)
+    `);
+  });
+
+  afterEach(async () => {
+    await truncateAll(dataSource);
+  });
+
+  it('returns 200 with suspects ordered by suspectScore DESC', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/analytics/wallets/top-suspects?days=30&limit=10')
+      .expect(200);
+
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+    // 0xsuspect1 has higher score
+    expect(res.body[0].walletAddress).toBe('0xsuspect1');
+    expect(parseFloat(res.body[0].suspectScore)).toBeGreaterThan(
+      parseFloat(res.body[res.body.length - 1].suspectScore),
+    );
+  });
+
+  it('response includes winRate field', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/analytics/wallets/top-suspects?days=30&limit=10')
+      .expect(200);
+
+    expect(res.body[0]).toHaveProperty('winRate');
+    expect(typeof res.body[0].winRate).toBe('number');
+  });
+
+  it('returns [] when no data matches the time window', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/analytics/wallets/top-suspects?days=0')
+      .expect(200);
+
+    expect(res.body).toEqual([]);
   });
 });
 

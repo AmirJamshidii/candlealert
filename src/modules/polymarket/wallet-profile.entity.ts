@@ -26,6 +26,18 @@ export class WalletProfileEntity {
   @Column({ type: 'jsonb', default: '[]' })
   favoriteCategories: { category: string; count: number }[];
 
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  suspectScore: string | null;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  winRate: string | null;
+
+  @Column({ nullable: true })
+  signalCount: number | null;
+
+  @Column({ type: 'numeric', precision: 20, scale: 6, nullable: true })
+  totalWagered: string | null;
+
   @UpdateDateColumn()
   fetchedAt: Date;
 }

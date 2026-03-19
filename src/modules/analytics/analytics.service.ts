@@ -7,6 +7,8 @@ import { WalletProfileRepository } from '../polymarket/wallet-profile.repository
 import { ErrorLogService } from '../error-log/error-log.service';
 import { PolymarketWinnerEntity } from '../polymarket/polymarket-winner.entity';
 import { AppConfig } from '../../config/app.config';
+import { SignalMetricsRepository } from '../signal-metrics/signal-metrics.repository';
+import { SignalMetricsEntity } from '../signal-metrics/signal-metrics.entity';
 
 interface PolymarketUserPosition {
   conditionId: string;
@@ -37,6 +39,7 @@ export class AnalyticsService {
     private readonly errorLogService: ErrorLogService,
     private readonly httpService: HttpService,
     private readonly appConfig: AppConfig,
+    private readonly signalMetricsRepo: SignalMetricsRepository,
   ) {}
 
   getSignalSummary(): Promise<{ interval: string; count: number }[]> {
@@ -51,14 +54,18 @@ export class AnalyticsService {
     return this.alertRepo.getHeatmap();
   }
 
-  getDirectionBreakdown(): Promise<{ interval: string; direction: string; count: number }[]> {
+  getDirectionBreakdown(): Promise<
+    { interval: string; direction: string; count: number }[]
+  > {
     return this.alertRepo.getDirectionBreakdown();
   }
 
   getWinnerLeaderboard(
     limit: number,
     interval?: string,
-  ): Promise<{ walletAddress: string; totalPosition: number; signalCount: number }[]> {
+  ): Promise<
+    { walletAddress: string; totalPosition: number; signalCount: number }[]
+  > {
     return this.winnerRepo.getLeaderboard(limit, interval);
   }
 
@@ -70,7 +77,9 @@ export class AnalyticsService {
     days: number,
     limit: number,
     interval?: string,
-  ): Promise<{ walletAddress: string; signalCount: number; totalPosition: number }[]> {
+  ): Promise<
+    { walletAddress: string; signalCount: number; totalPosition: number }[]
+  > {
     return this.winnerRepo.getHolderLeaderboard(days, limit, interval);
   }
 
@@ -78,51 +87,44 @@ export class AnalyticsService {
     days: number,
     limit: number,
     minAppearances: number,
-  ): Promise<{ walletAddress: string; appearances: number; avgPnl: number; totalPnl: number }[]> {
+  ): Promise<
+    {
+      walletAddress: string;
+      appearances: number;
+      avgPnl: number;
+      totalPnl: number;
+    }[]
+  > {
     return this.winnerRepo.getWinRateLeaderboard(days, limit, minAppearances);
   }
 
-  async getTopSuspects(
+  getTopSuspects(
     days: number,
     limit: number,
-  ): Promise<{
-    walletAddress: string;
-    displayName: string | null;
-    signalCount: number;
-    totalWagered: number;
-    totalPnl: number;
-    btcRatio: number;
-    suspectScore: number;
-  }[]> {
-    const raw = await this.winnerRepo.getTopSuspects(days, limit);
-    if (!raw.length) return [];
+  ): Promise<
+    {
+      walletAddress: string;
+      displayName: string | null;
+      signalCount: number;
+      totalWagered: number;
+      totalPnl: number;
+      btcRatio: number;
+      winRate: number;
+      suspectScore: number;
+    }[]
+  > {
+    return this.winnerRepo.getTopSuspectsPersisted(days, limit);
+  }
 
-    const norm = (val: number, min: number, max: number) =>
-      max === min ? 1 : (val - min) / (max - min);
+  getSignalMetrics(signalKey: string): Promise<SignalMetricsEntity | null> {
+    return this.signalMetricsRepo.findBySignalKey(signalKey);
+  }
 
-    const mins = {
-      signalCount: Math.min(...raw.map((r) => r.signalCount)),
-      totalWagered: Math.min(...raw.map((r) => r.totalWagered)),
-      totalPnl: Math.min(...raw.map((r) => r.totalPnl)),
-      btcRatio: Math.min(...raw.map((r) => r.btcRatio)),
-    };
-    const maxs = {
-      signalCount: Math.max(...raw.map((r) => r.signalCount)),
-      totalWagered: Math.max(...raw.map((r) => r.totalWagered)),
-      totalPnl: Math.max(...raw.map((r) => r.totalPnl)),
-      btcRatio: Math.max(...raw.map((r) => r.btcRatio)),
-    };
-
-    return raw
-      .map((r) => ({
-        ...r,
-        suspectScore:
-          0.3 * norm(r.signalCount, mins.signalCount, maxs.signalCount) +
-          0.3 * norm(r.btcRatio, mins.btcRatio, maxs.btcRatio) +
-          0.2 * norm(r.totalPnl, mins.totalPnl, maxs.totalPnl) +
-          0.2 * norm(r.totalWagered, mins.totalWagered, maxs.totalWagered),
-      }))
-      .sort((a, b) => b.suspectScore - a.suspectScore);
+  getHighScoringSignals(
+    minScore: number,
+    limit: number,
+  ): Promise<SignalMetricsEntity[]> {
+    return this.signalMetricsRepo.getHighScoring(minScore, limit);
   }
 
   getHolderHistory(walletAddress: string): Promise<PolymarketWinnerEntity[]> {
@@ -147,7 +149,13 @@ export class AnalyticsService {
     interval: string,
     limit: number,
   ): Promise<{
-    candles: { time: number; open: number; high: number; low: number; close: number }[];
+    candles: {
+      time: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+    }[];
     signals: { time: number; direction: string | null }[];
   }> {
     const url = `${this.appConfig.binanceBaseUrl}/api/v3/klines`;
@@ -173,7 +181,10 @@ export class AnalyticsService {
     if (candles.length > 0) {
       const earliestMs = candles[0].time * 1000;
       const intervalMs = this.parseIntervalMs(interval);
-      const rows = await this.alertRepo.getSignalsByIntervalSince(interval, earliestMs);
+      const rows = await this.alertRepo.getSignalsByIntervalSince(
+        interval,
+        earliestMs,
+      );
       signals = rows.map((r) => ({
         // openTime = closeTime - intervalMs + 1; convert ms → seconds
         time: Math.floor((r.candleCloseTimeMs - intervalMs + 1) / 1000),
@@ -204,7 +215,41 @@ export class AnalyticsService {
     closeTime: number;
     bodySize: number;
     wickRatio: number;
+    signalScore?: number;
+    snapshotPrice?: number | null;
+    snapshotDeltaPct?: number | null;
+    rejectionWick?: number;
   } | null> {
+    // Serve from DB first (no external call needed)
+    const stored = await this.signalMetricsRepo.findBySignalKey(signalKey);
+    if (stored) {
+      const open = parseFloat(stored.open);
+      const high = parseFloat(stored.high);
+      const low = parseFloat(stored.low);
+      const close = parseFloat(stored.close);
+      const range = high - low;
+      return {
+        openTime: parseInt(stored.candleOpenTime, 10),
+        open,
+        high,
+        low,
+        close,
+        volume: parseFloat(stored.volume),
+        closeTime: parseInt(stored.candleCloseTime, 10),
+        bodySize: parseFloat(stored.bodySize),
+        wickRatio: range > 0 ? parseFloat(stored.bodySize) / range : 0,
+        signalScore: parseFloat(stored.signalScore),
+        snapshotPrice: stored.snapshotPrice
+          ? parseFloat(stored.snapshotPrice)
+          : null,
+        snapshotDeltaPct: stored.snapshotDeltaPct
+          ? parseFloat(stored.snapshotDeltaPct)
+          : null,
+        rejectionWick: parseFloat(stored.rejectionWick),
+      };
+    }
+
+    // Fall back to Binance API for historical signals without stored metrics
     const [interval, openTimeStr] = signalKey.split(':');
     if (!interval || !openTimeStr) return null;
 
@@ -214,7 +259,12 @@ export class AnalyticsService {
     try {
       const res = await firstValueFrom(
         this.httpService.get(url, {
-          params: { symbol: 'BTCUSDT', interval, startTime: openTime, limit: 1 },
+          params: {
+            symbol: 'BTCUSDT',
+            interval,
+            startTime: openTime,
+            limit: 1,
+          },
           timeout: 10_000,
         }),
       );
@@ -276,14 +326,27 @@ export class AnalyticsService {
     const url = `${this.appConfig.polymarketDataUrl}/positions`;
     try {
       const res = await firstValueFrom(
-        this.httpService.get(url, { params: { user: address, limit: 500 }, timeout: 15_000 }),
+        this.httpService.get(url, {
+          params: { user: address, limit: 500 },
+          timeout: 15_000,
+        }),
       );
-      const positions: PolymarketUserPosition[] = Array.isArray(res.data) ? res.data : [];
+      const positions: PolymarketUserPosition[] = Array.isArray(res.data)
+        ? res.data
+        : [];
 
-      const totalCurrentValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
-      const totalRealizedPnl = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
+      const totalCurrentValue = positions.reduce(
+        (s, p) => s + (p.currentValue ?? 0),
+        0,
+      );
+      const totalRealizedPnl = positions.reduce(
+        (s, p) => s + (p.realizedPnl ?? 0),
+        0,
+      );
       const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
-      const btcUpdownPositions = positions.filter((p) => p.eventSlug?.startsWith('btc-updown')).length;
+      const btcUpdownPositions = positions.filter((p) =>
+        p.eventSlug?.startsWith('btc-updown'),
+      ).length;
 
       const categoryCounts: Record<string, number> = {};
       for (const p of positions) {
@@ -296,15 +359,19 @@ export class AnalyticsService {
         .slice(0, 5);
 
       // Persist for future requests (name unknown from this path)
-      await this.walletProfileRepo.upsert({
-        walletAddress: address,
-        totalPositions: positions.length,
-        totalCurrentValue: String(totalCurrentValue),
-        totalRealizedPnl: String(totalRealizedPnl),
-        totalCashPnl: String(totalCashPnl),
-        btcUpdownPositions,
-        favoriteCategories,
-      }).catch(() => { /* non-critical */ });
+      await this.walletProfileRepo
+        .upsert({
+          walletAddress: address,
+          totalPositions: positions.length,
+          totalCurrentValue: String(totalCurrentValue),
+          totalRealizedPnl: String(totalRealizedPnl),
+          totalCashPnl: String(totalCashPnl),
+          btcUpdownPositions,
+          favoriteCategories,
+        })
+        .catch(() => {
+          /* non-critical */
+        });
 
       return {
         walletAddress: address,

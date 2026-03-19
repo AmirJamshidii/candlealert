@@ -7,6 +7,7 @@ import { PolymarketService } from '../polymarket/polymarket.service';
 import { AppConfig } from '../../config/app.config';
 import { formatReversalAlert } from '../telegram/telegram-message.factory';
 import { ErrorLogService } from '../error-log/error-log.service';
+import { SignalMetricsService } from '../signal-metrics/signal-metrics.service';
 
 @Injectable()
 export class AlertService {
@@ -18,29 +19,61 @@ export class AlertService {
     private readonly polymarketService: PolymarketService,
     private readonly appConfig: AppConfig,
     private readonly errorLogService: ErrorLogService,
+    private readonly signalMetricsService: SignalMetricsService,
   ) {}
 
   @OnEvent('reversal.detected')
   async handleReversalDetected(event: ReversalSignalEvent): Promise<void> {
     const { signalKey, interval, candle, snapshotPrice, direction } = event;
 
+    // Record enriched signal metrics (non-blocking)
+    void this.signalMetricsService
+      .record(event)
+      .catch((err) =>
+        this.errorLogService.log(err, { module: 'signal-metrics' }),
+      );
+
     try {
       // Send initial alert immediately (without Polymarket data)
-      const initialMessage = formatReversalAlert(candle, interval, [], snapshotPrice, this.appConfig.snapshotWindowMs, [], direction, true);
+      const initialMessage = formatReversalAlert(
+        candle,
+        interval,
+        [],
+        snapshotPrice,
+        this.appConfig.snapshotWindowMs,
+        [],
+        direction,
+        true,
+      );
 
       const messageIds = new Map<string, number>();
       await Promise.all(
         this.appConfig.telegramChatIds.map(async (chatId) => {
-          const isDuplicate = await this.alertRepo.isDuplicate(signalKey, chatId);
+          const isDuplicate = await this.alertRepo.isDuplicate(
+            signalKey,
+            chatId,
+          );
           if (isDuplicate) {
-            this.logger.debug(`Duplicate alert skipped [${chatId}]: ${signalKey}`);
+            this.logger.debug(
+              `Duplicate alert skipped [${chatId}]: ${signalKey}`,
+            );
             return;
           }
-          const msgId = await this.telegramService.sendMessage(initialMessage, chatId);
+          const msgId = await this.telegramService.sendMessage(
+            initialMessage,
+            chatId,
+          );
           if (msgId) messageIds.set(chatId, msgId);
           const eventSlug = `btc-updown-${interval}-${Math.floor(candle.openTime / 1000)}`;
           const polymarketUrl = `https://polymarket.com/event/${eventSlug}`;
-          await this.alertRepo.record(signalKey, chatId, interval, candle.closeTime, direction, polymarketUrl);
+          await this.alertRepo.record(
+            signalKey,
+            chatId,
+            interval,
+            candle.closeTime,
+            direction,
+            polymarketUrl,
+          );
           this.logger.log(`Alert sent [${chatId}] for ${signalKey}`);
         }),
       );
@@ -60,28 +93,45 @@ export class AlertService {
               return;
             }
 
-            const isClosed = await this.polymarketService.isMarketClosed(interval, candle.openTime);
-            this.logger.debug(`Market closed check for ${signalKey}: ${isClosed}`);
+            const isClosed = await this.polymarketService.isMarketClosed(
+              interval,
+              candle.openTime,
+            );
+            this.logger.debug(
+              `Market closed check for ${signalKey}: ${isClosed}`,
+            );
             if (!isClosed) return;
 
             clearInterval(poll);
 
-            const { holders, positions } = await this.polymarketService.handleSignal(
-              signalKey,
-              interval,
-              candle.openTime,
-              candle.closeTime,
-              direction,
-            );
+            const { holders, positions } =
+              await this.polymarketService.handleSignal(
+                signalKey,
+                interval,
+                candle.openTime,
+                candle.closeTime,
+                direction,
+              );
 
-            const updatedMessage = formatReversalAlert(candle, interval, holders, snapshotPrice, this.appConfig.snapshotWindowMs, positions, direction, false);
+            const updatedMessage = formatReversalAlert(
+              candle,
+              interval,
+              holders,
+              snapshotPrice,
+              this.appConfig.snapshotWindowMs,
+              positions,
+              direction,
+              false,
+            );
 
             await Promise.all(
               [...messageIds.entries()].map(([chatId, msgId]) =>
                 this.telegramService.editMessage(updatedMessage, chatId, msgId),
               ),
             );
-            this.logger.log(`Alert edited with Polymarket data for ${signalKey}`);
+            this.logger.log(
+              `Alert edited with Polymarket data for ${signalKey}`,
+            );
           } catch (err) {
             this.errorLogService.log(err, { module: 'alert-poll' });
           }

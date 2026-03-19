@@ -18,7 +18,12 @@ export class HealthController {
 
   @Get('health')
   @ApiOperation({ summary: 'Database connectivity health check' })
-  @ApiResponse({ status: 200, schema: { example: { status: 'ok', timestamp: '2024-01-01T00:00:00.000Z' } } })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: { status: 'ok', timestamp: '2024-01-01T00:00:00.000Z' },
+    },
+  })
   async health() {
     try {
       await this.dataSource.query('SELECT 1');
@@ -29,8 +34,19 @@ export class HealthController {
   }
 
   @Get('config')
-  @ApiOperation({ summary: 'Current app configuration (symbol, intervals, winner count)' })
-  @ApiResponse({ status: 200, schema: { example: { symbol: 'BTCUSDT', intervals: ['5m', '15m', '1h'], polymarketWinnerCount: 10 } } })
+  @ApiOperation({
+    summary: 'Current app configuration (symbol, intervals, winner count)',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        symbol: 'BTCUSDT',
+        intervals: ['5m', '15m', '1h'],
+        polymarketWinnerCount: 10,
+      },
+    },
+  })
   config() {
     return {
       symbol: 'BTCUSDT',
@@ -41,7 +57,12 @@ export class HealthController {
 
   @Get('alerts')
   @ApiOperation({ summary: 'Recent alerts sent via Telegram' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max rows to return (default 100)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max rows to return (default 100)',
+  })
   @ApiResponse({ status: 200 })
   async alerts(@Query('limit') limit?: string) {
     return this.alertRepo.getRecent(limit ? parseInt(limit, 10) : 100);
@@ -49,7 +70,12 @@ export class HealthController {
 
   @Get('winners')
   @ApiOperation({ summary: 'Recent Polymarket down-position holders' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max rows to return (default 100)' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Max rows to return (default 100)',
+  })
   @ApiResponse({ status: 200 })
   async winners(@Query('limit') limit?: string) {
     return this.winnerRepo.getRecent(limit ? parseInt(limit, 10) : 100);

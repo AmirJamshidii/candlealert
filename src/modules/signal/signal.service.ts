@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { KlineTickEvent } from '../../events/kline-tick.event';
-import { ReversalDirection, ReversalSignalEvent } from '../../events/reversal-signal.event';
+import {
+  ReversalDirection,
+  ReversalSignalEvent,
+} from '../../events/reversal-signal.event';
 import { SignalStateService } from './signal-state.service';
 import { AppConfig } from '../../config/app.config';
 
@@ -29,7 +32,12 @@ export class SignalService {
       !this.signalStateService.hasSnapshot(interval, candle.openTime)
     ) {
       const isGreen = candle.close > candle.open;
-      this.signalStateService.snapshot(interval, candle.openTime, isGreen, candle.close);
+      this.signalStateService.snapshot(
+        interval,
+        candle.openTime,
+        isGreen,
+        candle.close,
+      );
       this.logger.debug(
         `[${interval}] T-10s snapshot: candle ${isGreen ? 'GREEN' : 'RED'} at ${candle.close}`,
       );
@@ -48,7 +56,9 @@ export class SignalService {
 
       if (isReversal || isTestMode) {
         const signalKey = `reversal:BTCUSDT:${interval}:${candle.closeTime}`;
-        const direction: ReversalDirection = isCandleRed ? 'green_to_red' : 'red_to_green';
+        const direction: ReversalDirection = isCandleRed
+          ? 'green_to_red'
+          : 'red_to_green';
         this.logger.log(
           isTestMode && !isReversal
             ? `[${interval}] TEST MODE: forcing signal. Key: ${signalKey}`
@@ -57,7 +67,16 @@ export class SignalService {
               : `[${interval}] REVERSAL detected! Was red at ${snapshot.closeAtSnapshot}, closed green at ${candle.close}. Key: ${signalKey}`,
         );
         const snapshotPrice = snapshot?.closeAtSnapshot ?? null;
-        this.eventEmitter.emit('reversal.detected', new ReversalSignalEvent(signalKey, interval, candle, snapshotPrice, direction));
+        this.eventEmitter.emit(
+          'reversal.detected',
+          new ReversalSignalEvent(
+            signalKey,
+            interval,
+            candle,
+            snapshotPrice,
+            direction,
+          ),
+        );
       }
 
       // Always clean up snapshot on close

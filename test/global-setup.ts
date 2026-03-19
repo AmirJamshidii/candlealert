@@ -14,7 +14,11 @@ export default async function globalSetup() {
   console.log('Test database ready.\n');
 }
 
-function waitForPort(host: string, port: number, timeoutMs: number): Promise<void> {
+function waitForPort(
+  host: string,
+  port: number,
+  timeoutMs: number,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
 
@@ -29,7 +33,11 @@ function waitForPort(host: string, port: number, timeoutMs: number): Promise<voi
       socket.on('error', () => {
         socket.destroy();
         if (Date.now() > deadline) {
-          reject(new Error(`Timed out waiting for ${host}:${port} after ${timeoutMs}ms`));
+          reject(
+            new Error(
+              `Timed out waiting for ${host}:${port} after ${timeoutMs}ms`,
+            ),
+          );
         } else {
           setTimeout(attempt, 500);
         }

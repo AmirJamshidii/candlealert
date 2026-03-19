@@ -1,9 +1,17 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as WebSocket from 'ws';
 import { AppConfig } from '../../config/app.config';
 import { ErrorLogService } from '../error-log/error-log.service';
-import { IBinanceKlineWsMessage, ICandle } from '../../common/interfaces/candle.interface';
+import {
+  IBinanceKlineWsMessage,
+  ICandle,
+} from '../../common/interfaces/candle.interface';
 import { KlineTickEvent } from '../../events/kline-tick.event';
 
 @Injectable()
@@ -31,7 +39,9 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
     if (this.destroyed) return;
 
     const url = `${this.appConfig.binanceWsUrl}/ws/btcusdt@kline_${interval}`;
-    this.logger.log(`Connecting to Binance WS [${interval}] (attempt ${attempt}): ${url}`);
+    this.logger.log(
+      `Connecting to Binance WS [${interval}] (attempt ${attempt}): ${url}`,
+    );
 
     const ws = new WebSocket(url);
 
@@ -56,7 +66,10 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
           volume: parseFloat(k.v),
           isClosed: k.x,
         };
-        this.eventEmitter.emit('kline.tick', new KlineTickEvent(interval, candle));
+        this.eventEmitter.emit(
+          'kline.tick',
+          new KlineTickEvent(interval, candle),
+        );
       } catch (err) {
         this.errorLogService.log(err, { module: 'binance-ws' });
       }
@@ -67,9 +80,17 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
     ws.on('close', (code) => {
       this.sockets.delete(interval);
       if (this.destroyed || code === 1000) return;
-      const delay = Math.min(this.BASE_DELAY * Math.pow(2, attempt), this.MAX_DELAY);
-      this.logger.warn(`Binance WS [${interval}] closed (code ${code}), reconnecting in ${delay}ms`);
-      const timer = setTimeout(() => this.connect(interval, attempt + 1), delay);
+      const delay = Math.min(
+        this.BASE_DELAY * Math.pow(2, attempt),
+        this.MAX_DELAY,
+      );
+      this.logger.warn(
+        `Binance WS [${interval}] closed (code ${code}), reconnecting in ${delay}ms`,
+      );
+      const timer = setTimeout(
+        () => this.connect(interval, attempt + 1),
+        delay,
+      );
       this.reconnectTimers.set(interval, timer);
     });
 

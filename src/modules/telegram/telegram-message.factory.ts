@@ -17,7 +17,13 @@ export interface IPosition {
 }
 
 function formatPrice(n: number): string {
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    '$' +
+    n.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
 }
 
 function abbreviateAddress(addr: string): string {
@@ -96,7 +102,12 @@ export function formatReversalAlert(
     '',
     winnerLines,
     ...(positions.length
-      ? ['', `💰 Top ${positions.length} Polymarket ${side} Positions by PNL`, '', positionLines]
+      ? [
+          '',
+          `💰 Top ${positions.length} Polymarket ${side} Positions by PNL`,
+          '',
+          positionLines,
+        ]
       : []),
   ].join('\n');
 }

@@ -43,7 +43,9 @@ describe('HealthController (e2e)', () => {
 
   describe('GET /api/health', () => {
     it('returns status ok with a timestamp', async () => {
-      const res = await request(app.getHttpServer()).get('/api/health').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/health')
+        .expect(200);
       expect(res.body.status).toBe('ok');
       expect(typeof res.body.timestamp).toBe('string');
       expect(new Date(res.body.timestamp).toString()).not.toBe('Invalid Date');
@@ -54,7 +56,9 @@ describe('HealthController (e2e)', () => {
 
   describe('GET /api/config', () => {
     it('returns symbol, intervals array, and polymarketWinnerCount', async () => {
-      const res = await request(app.getHttpServer()).get('/api/config').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/config')
+        .expect(200);
       expect(res.body.symbol).toBe('BTCUSDT');
       expect(Array.isArray(res.body.intervals)).toBe(true);
       expect(res.body.intervals.length).toBeGreaterThan(0);
@@ -83,31 +87,43 @@ describe('HealthController (e2e)', () => {
 
     it('returns [] when no alerts exist', async () => {
       await dataSource.query(`TRUNCATE alerts RESTART IDENTITY CASCADE`);
-      const res = await request(app.getHttpServer()).get('/api/alerts').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/alerts')
+        .expect(200);
       expect(res.body).toEqual([]);
     });
 
     it('returns all seeded alerts', async () => {
-      const res = await request(app.getHttpServer()).get('/api/alerts').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/alerts')
+        .expect(200);
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBe(3);
     });
 
     it('returns alerts ordered by sentAt descending', async () => {
-      const res = await request(app.getHttpServer()).get('/api/alerts').expect(200);
-      const dates = res.body.map((r: { sentAt: string }) => new Date(r.sentAt).getTime());
+      const res = await request(app.getHttpServer())
+        .get('/api/alerts')
+        .expect(200);
+      const dates = res.body.map((r: { sentAt: string }) =>
+        new Date(r.sentAt).getTime(),
+      );
       for (let i = 1; i < dates.length; i++) {
         expect(dates[i - 1]).toBeGreaterThanOrEqual(dates[i]);
       }
     });
 
     it('respects the ?limit param', async () => {
-      const res = await request(app.getHttpServer()).get('/api/alerts?limit=1').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/alerts?limit=1')
+        .expect(200);
       expect(res.body.length).toBe(1);
     });
 
     it('returns alert objects with expected fields', async () => {
-      const res = await request(app.getHttpServer()).get('/api/alerts?limit=1').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/alerts?limit=1')
+        .expect(200);
       const alert = res.body[0];
       expect(alert).toHaveProperty('id');
       expect(alert).toHaveProperty('signalKey');
@@ -138,32 +154,46 @@ describe('HealthController (e2e)', () => {
     });
 
     it('returns [] when no winners exist', async () => {
-      await dataSource.query(`TRUNCATE polymarket_winners RESTART IDENTITY CASCADE`);
-      const res = await request(app.getHttpServer()).get('/api/winners').expect(200);
+      await dataSource.query(
+        `TRUNCATE polymarket_winners RESTART IDENTITY CASCADE`,
+      );
+      const res = await request(app.getHttpServer())
+        .get('/api/winners')
+        .expect(200);
       expect(res.body).toEqual([]);
     });
 
     it('returns all seeded winners', async () => {
-      const res = await request(app.getHttpServer()).get('/api/winners').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/winners')
+        .expect(200);
       expect(Array.isArray(res.body)).toBe(true);
       expect(res.body.length).toBe(3);
     });
 
     it('returns winners ordered by createdAt descending', async () => {
-      const res = await request(app.getHttpServer()).get('/api/winners').expect(200);
-      const dates = res.body.map((r: { createdAt: string }) => new Date(r.createdAt).getTime());
+      const res = await request(app.getHttpServer())
+        .get('/api/winners')
+        .expect(200);
+      const dates = res.body.map((r: { createdAt: string }) =>
+        new Date(r.createdAt).getTime(),
+      );
       for (let i = 1; i < dates.length; i++) {
         expect(dates[i - 1]).toBeGreaterThanOrEqual(dates[i]);
       }
     });
 
     it('respects the ?limit param', async () => {
-      const res = await request(app.getHttpServer()).get('/api/winners?limit=2').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/winners?limit=2')
+        .expect(200);
       expect(res.body.length).toBe(2);
     });
 
     it('returns winner objects with expected fields', async () => {
-      const res = await request(app.getHttpServer()).get('/api/winners?limit=1').expect(200);
+      const res = await request(app.getHttpServer())
+        .get('/api/winners?limit=1')
+        .expect(200);
       const winner = res.body[0];
       expect(winner).toHaveProperty('id');
       expect(winner).toHaveProperty('signalKey');
