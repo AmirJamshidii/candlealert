@@ -357,6 +357,28 @@
     .top-wallet-name { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .top-wallet-sigs { font-size: 11px; color: var(--text3); white-space: nowrap; }
     .top-wallet-shares { font-size: 13px; color: var(--text2); white-space: nowrap; min-width: 70px; text-align: right; }
+
+    /* ── Score badge ── */
+    .score-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 42px; padding: 2px 8px; border-radius: 6px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .score-badge.gold { background: rgba(251,188,4,0.15); color: #fbbc04; border: 1px solid rgba(251,188,4,0.35); }
+    .score-badge.blue { background: var(--primary-bg); color: var(--on-primary); border: 1px solid rgba(26,115,232,0.4); }
+    .score-badge.grey { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+
+    /* ── Candle anatomy bars ── */
+    .anatomy-bar-wrap { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); }
+    .anatomy-bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; min-width: 60px; }
+    .anatomy-bar-fill { height: 100%; border-radius: 3px; background: var(--primary); }
+    .anatomy-bar-fill.red-fill   { background: var(--red); }
+    .anatomy-bar-fill.green-fill { background: var(--green); }
+    .anatomy-bar-fill.yellow-fill { background: var(--yellow); }
+
+    /* ── Signal Metrics section ── */
+    .metrics-filter-bar { display: flex; gap: 12px; padding: 0 20px 12px; flex-wrap: wrap; align-items: center; }
+    .metrics-score-col  { min-width: 56px; text-align: center; }
   </style>
 </head>
 <body>
@@ -380,6 +402,9 @@
     </div>
     <div class="nav-item" data-section="leaderboard">
       <span class="material-icons">leaderboard</span> Wallet Leaderboard
+    </div>
+    <div class="nav-item" data-section="metrics">
+      <span class="material-icons">insights</span> Signal Metrics
     </div>
     <hr class="nav-divider" />
     <div class="nav-item" data-section="errors">
@@ -492,6 +517,7 @@
                 <th class="sortable" onclick="sortSignals('interval')">Interval <span id="sort-interval"></span></th>
                 <th class="sortable" onclick="sortSignals('direction')">Direction <span id="sort-direction"></span></th>
                 <th class="sortable" onclick="sortSignals('time')">Signal <span id="sort-time">▼</span></th>
+                <th class="metrics-score-col">Score</th>
                 <th></th>
               </tr>
             </thead>
@@ -532,6 +558,46 @@
       </div>
     </section>
 
+    <!-- ── SIGNAL METRICS ── -->
+    <section class="section" id="metrics">
+      <div class="section-header">
+        <div class="section-title">Signal Metrics</div>
+        <div class="section-sub">Top-scored reversal signals — highest manipulation confidence first</div>
+      </div>
+      <div class="table-card">
+        <div class="metrics-filter-bar">
+          <div class="filter-group" id="metricsMinScoreGroup">
+            <button class="filter-btn active" data-val="50" onclick="setMetricsMinScore(this)">Score ≥50</button>
+            <button class="filter-btn" data-val="70" onclick="setMetricsMinScore(this)">Score ≥70</button>
+            <button class="filter-btn" data-val="80" onclick="setMetricsMinScore(this)">Score ≥80</button>
+          </div>
+          <span class="filter-sep">|</span>
+          <div class="filter-group" id="metricsIntFilter"></div>
+        </div>
+        <div class="ctable-wrap" style="padding-top:0">
+          <table class="ctable" id="metricsTable">
+            <thead>
+              <tr>
+                <th class="metrics-score-col sortable" onclick="sortMetrics('score')">Score <span id="msort-score">▼</span></th>
+                <th>Interval</th>
+                <th>Direction</th>
+                <th class="sortable" onclick="sortMetrics('time')">Signal Time <span id="msort-time"></span></th>
+                <th>Body%</th>
+                <th>Snapshot Δ%</th>
+                <th>Rejection Wick</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="metricsTbody"></tbody>
+          </table>
+          <div id="metricsEmpty" class="empty-state" style="display:none">
+            <span class="material-icons">insights</span>
+            No scored signals yet.
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── ERRORS ── -->
     <section class="section" id="errors">
       <div class="section-header">
@@ -557,6 +623,7 @@ const TITLES = {
   overview: 'Overview',
   signals: 'Signals',
   leaderboard: 'Wallet Leaderboard',
+  metrics: 'Signal Metrics',
   errors: 'Error Log',
 };
 
@@ -585,6 +652,15 @@ function computeSinceMs(period) {
 const profileCache = new Map();   // address → profile data
 const winnersCache = new Map();   // signalKey → winners array
 const expandState = new Map();    // rowId → open boolean
+const metricsMap = new Map();     // signalKey → SignalMetricsEntity (batch populated)
+const metricsCache = new Map();   // signalKey → SignalMetricsEntity (per-signal lazy cache)
+
+// ── Signal Metrics section state ──
+let metricsData = [];
+let metricsSortCol = 'score';
+let metricsSortDir = 'desc';
+let metricsMinScore = 50;
+let metricsIntFilterVal = '';
 
 // ── Sidebar navigation ──
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -641,6 +717,16 @@ function dirBadgeHtml(d) {
   return `<span style="color:var(--text3)">${d}</span>`;
 }
 function intervalBadgeHtml(v) { return `<span class="badge-interval">${v}</span>`; }
+function scoreBadgeHtml(score) {
+  if (score == null || isNaN(score)) return '<span class="score-badge grey">—</span>';
+  const tier = score >= 80 ? 'gold' : score >= 50 ? 'blue' : 'grey';
+  return `<span class="score-badge ${tier}">${Math.round(score)}</span>`;
+}
+function fmtPrice(n, dp = 2) {
+  const v = parseFloat(n);
+  if (isNaN(v)) return '—';
+  return v.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
 function pnlHtml(v) {
   const n = parseFloat(v);
   if (isNaN(n)) return '<span style="color:var(--text3)">—</span>';
@@ -867,6 +953,68 @@ function renderCustomTable(tbodyId, emptyId, rows) {
   tbody.innerHTML = rows.join('');
 }
 
+// ── Shared expand panel renderers ──
+function renderWinnersPanel(winners) {
+  if (!winners || !winners.length) {
+    return `<div style="color:var(--text3);font-size:13px;padding:12px 0">No winners recorded.</div>`;
+  }
+  const rows = winners.map(w => `<tr>
+    <td><span class="rank-badge">${w.positionRank ? '#' + w.positionRank : '—'}</span></td>
+    <td>${walletLinkHtml(w.walletAddress, w.displayName)}</td>
+    <td>${fmtNum(w.positionSize)}</td>
+  </tr>`).join('');
+  return `<div class="winners-expand" style="flex:1;min-width:240px">
+    <table>
+      <thead><tr><th>Rank</th><th>Wallet</th><th>Shares</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+function renderMetricsPanel(m) {
+  const score = parseFloat(m.signalScore);
+  const bodyPct = parseFloat(m.bodySizePct);
+  const deltaPct = parseFloat(m.snapshotDeltaPct);
+  const rejWick = parseFloat(m.rejectionWick);
+  const open = parseFloat(m.open);
+  const close = parseFloat(m.close);
+  const isRed = m.direction === 'green_to_red';
+  const bodyBarClass = isRed ? 'red-fill' : 'green-fill';
+  const bodyBarW = Math.min(100, bodyPct).toFixed(1);
+  const wickBarW = Math.min(100, isNaN(rejWick) || isNaN(parseFloat(m.bodySize)) ? 0 : (rejWick / (parseFloat(m.bodySize) * 2 + 0.0001)) * 100).toFixed(1);
+  const deltaHtml = isNaN(deltaPct)
+    ? '<span style="color:var(--text3)">—</span>'
+    : `<span class="${deltaPct < 0 ? 'pnl-neg' : 'pnl-pos'}">${(deltaPct >= 0 ? '+' : '') + deltaPct.toFixed(4)}%</span>`;
+  return `<div class="profile-card" style="flex-direction:column;gap:12px;flex:1;min-width:280px">
+    <div style="display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);padding-bottom:10px">
+      <span style="font-size:13px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:.05em">Candle Metrics</span>
+      ${scoreBadgeHtml(score)}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:20px">
+      <div class="profile-stat">
+        <span class="profile-stat-label">Open / Close</span>
+        <span class="profile-stat-value" style="font-size:13px">$${fmtPrice(open)} → $${fmtPrice(close)}</span>
+      </div>
+      <div class="profile-stat">
+        <span class="profile-stat-label">Snapshot Δ%</span>
+        <span class="profile-stat-value">${deltaHtml}</span>
+      </div>
+      <div class="profile-stat" style="flex-basis:100%">
+        <span class="profile-stat-label" style="margin-bottom:4px">Body Size (${isNaN(bodyPct) ? '—' : bodyPct.toFixed(1) + '%'})</span>
+        <div class="anatomy-bar-wrap">
+          <div class="anatomy-bar-track"><div class="anatomy-bar-fill ${bodyBarClass}" style="width:${bodyBarW}%"></div></div>
+        </div>
+      </div>
+      <div class="profile-stat" style="flex-basis:100%">
+        <span class="profile-stat-label" style="margin-bottom:4px">Rejection Wick ($${fmtPrice(rejWick)})</span>
+        <div class="anatomy-bar-wrap">
+          <div class="anatomy-bar-track"><div class="anatomy-bar-fill yellow-fill" style="width:${wickBarW}%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── Profile expand ──
 async function toggleProfileExpand(address, btnEl) {
   const tr = btnEl.closest('tr');
@@ -937,11 +1085,11 @@ async function toggleProfileExpand(address, btnEl) {
   </td>`;
 }
 
-// ── Signal winners expand ──
-async function toggleSignalWinners(signalKey, btnEl) {
+// ── Signal expand (winners + metrics) ──
+async function toggleSignalExpand(signalKey, btnEl) {
   const tr = btnEl.closest('tr');
   const safeKey = signalKey.replace(/[^a-z0-9]/gi, '');
-  const expandId = `winners-expand-${safeKey}`;
+  const expandId = `signal-expand-${safeKey}`;
   const existing = document.getElementById(expandId);
 
   if (existing) {
@@ -955,32 +1103,58 @@ async function toggleSignalWinners(signalKey, btnEl) {
   const placeholderTr = document.createElement('tr');
   placeholderTr.id = expandId;
   placeholderTr.className = 'expand-row';
-  placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading">Loading winners…</div></td>`;
+  placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading">Loading…</div></td>`;
   tr.after(placeholderTr);
 
-  if (!winnersCache.has(signalKey)) {
-    const data = await fetchJSON(`/api/analytics/winners/by-signal/${encodeURIComponent(signalKey)}`);
-    winnersCache.set(signalKey, data || []);
-  }
-  const winners = winnersCache.get(signalKey);
+  const [winners, metricsResult] = await Promise.all([
+    winnersCache.has(signalKey)
+      ? Promise.resolve(winnersCache.get(signalKey))
+      : fetchJSON(`/api/analytics/winners/by-signal/${encodeURIComponent(signalKey)}`).then(d => { winnersCache.set(signalKey, d || []); return d || []; }),
+    metricsCache.has(signalKey)
+      ? Promise.resolve(metricsCache.get(signalKey))
+      : fetchJSON(`/api/analytics/signals/${encodeURIComponent(signalKey)}/metrics`).then(d => { metricsCache.set(signalKey, d); return d; }),
+  ]);
 
-  if (!winners.length) {
-    placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading" style="color:var(--text3)">No winners recorded for this signal.</div></td>`;
+  const metricsHtml = metricsResult ? renderMetricsPanel(metricsResult) : '';
+  const winnersHtml = renderWinnersPanel(winners);
+
+  placeholderTr.innerHTML = `<td colspan="99">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 14px 12px">
+      ${metricsHtml}
+      ${winnersHtml}
+    </div>
+  </td>`;
+}
+
+// ── Metrics section expand ──
+async function toggleMetricsExpand(signalKey, btnEl) {
+  const tr = btnEl.closest('tr');
+  const safeKey = signalKey.replace(/[^a-z0-9]/gi, '');
+  const expandId = `mexp-expand-${safeKey}`;
+  const existing = document.getElementById(expandId);
+
+  if (existing) {
+    btnEl.classList.toggle('open');
+    existing.style.display = existing.style.display === 'none' ? '' : 'none';
     return;
   }
 
-  const rows = winners.map(w => `<tr>
-    <td><span class="rank-badge">${w.positionRank ? '#' + w.positionRank : '—'}</span></td>
-    <td>${walletLinkHtml(w.walletAddress, w.displayName)}</td>
-    <td>${fmtNum(w.positionSize)}</td>
-  </tr>`).join('');
+  btnEl.classList.add('open');
+  const placeholderTr = document.createElement('tr');
+  placeholderTr.id = expandId;
+  placeholderTr.className = 'expand-row';
+  placeholderTr.innerHTML = `<td colspan="99"><div class="profile-loading">Loading…</div></td>`;
+  tr.after(placeholderTr);
+
+  const m = metricsMap.get(signalKey) || await fetchJSON(`/api/analytics/signals/${encodeURIComponent(signalKey)}/metrics`).then(d => { if (d) metricsCache.set(signalKey, d); return d; });
+  const winners = winnersCache.has(signalKey)
+    ? winnersCache.get(signalKey)
+    : await fetchJSON(`/api/analytics/winners/by-signal/${encodeURIComponent(signalKey)}`).then(d => { winnersCache.set(signalKey, d || []); return d || []; });
 
   placeholderTr.innerHTML = `<td colspan="99">
-    <div class="winners-expand">
-      <table>
-        <thead><tr><th>Rank</th><th>Wallet</th><th>Shares</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;padding:8px 14px 12px">
+      ${m ? renderMetricsPanel(m) : ''}
+      ${renderWinnersPanel(winners)}
     </div>
   </td>`;
 }
@@ -1068,6 +1242,8 @@ function renderSignalsTable() {
     const ts = r.sentAt ? new Date(r.sentAt).getTime() : (Number(r.signalKey.split(':').pop()) || 0);
     const relAge = ts ? timeAgo(ts) : '';
     const dirClass = r.direction === 'green_to_red' ? 'red' : 'green';
+    const m = metricsMap.get(r.signalKey);
+    const scoreTd = `<td class="metrics-score-col">${scoreBadgeHtml(m ? parseFloat(m.signalScore) : null)}</td>`;
     return `<tr class="sig-row sig-row-${dirClass}">
       <td>${intervalBadgeHtml(r.interval)}</td>
       <td>${dirBadgeHtml(r.direction)}</td>
@@ -1077,8 +1253,9 @@ function renderSignalsTable() {
           ${signalKeyToTime(r.signalKey)}
         </a>
       </td>
+      ${scoreTd}
       <td>
-        <button class="expand-btn" id="sig-btn-${safeKey}" onclick="toggleSignalWinners('${r.signalKey}', this)">
+        <button class="expand-btn" id="sig-btn-${safeKey}" onclick="toggleSignalExpand('${r.signalKey}', this)">
           <span class="material-icons">expand_more</span>
         </button>
       </td>
@@ -1114,6 +1291,12 @@ function setSigFilterInt(btn) {
   renderSignalsTable();
 }
 
+async function loadSignalMetricsBatch() {
+  const d = await fetchJSON('/api/analytics/signals/top-scored?minScore=0&limit=200');
+  if (!d) return;
+  d.forEach(m => metricsMap.set(m.signalKey, m));
+}
+
 async function loadSignals() {
   const d = await fetchJSON('/api/alerts?limit=200');
   if (!d) return;
@@ -1133,7 +1316,99 @@ async function loadSignals() {
       intervals.map(iv => `<button class="filter-btn" data-val="${iv}" onclick="setSigFilterInt(this)">${iv}</button>`).join('');
   }
 
+  await loadSignalMetricsBatch();
   renderSignalsTable();
+}
+
+// ── Signal Metrics section ──
+async function loadMetrics() {
+  const d = await fetchJSON('/api/analytics/signals/top-scored?minScore=0&limit=200');
+  if (!d) return;
+  metricsData = d;
+  d.forEach(m => metricsMap.set(m.signalKey, m));
+
+  const intervals = [...new Set(d.map(m => m.interval).filter(Boolean))];
+  const mif = document.getElementById('metricsIntFilter');
+  if (mif) {
+    mif.innerHTML = `<button class="filter-btn active" data-val="" onclick="setMetricsIntFilter(this)">All</button>` +
+      intervals.map(iv => `<button class="filter-btn" data-val="${iv}" onclick="setMetricsIntFilter(this)">${iv}</button>`).join('');
+  }
+
+  renderMetricsTable();
+}
+
+function renderMetricsTable() {
+  let filtered = metricsData.filter(m =>
+    parseFloat(m.signalScore) >= metricsMinScore &&
+    (!metricsIntFilterVal || m.interval === metricsIntFilterVal)
+  );
+
+  filtered.sort((a, b) => {
+    let av, bv;
+    if (metricsSortCol === 'score') {
+      av = parseFloat(a.signalScore);
+      bv = parseFloat(b.signalScore);
+    } else {
+      av = Number(a.signalKey.split(':').pop()) || 0;
+      bv = Number(b.signalKey.split(':').pop()) || 0;
+    }
+    if (av < bv) return metricsSortDir === 'asc' ? -1 : 1;
+    if (av > bv) return metricsSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const rows = filtered.map(m => {
+    const safeKey = m.signalKey.replace(/[^a-z0-9]/gi, '');
+    const bodyPct = parseFloat(m.bodySizePct);
+    const deltaPct = parseFloat(m.snapshotDeltaPct);
+    const rejWick = parseFloat(m.rejectionWick);
+    const dirClass = m.direction === 'green_to_red' ? 'red' : 'green';
+    const deltaHtml = isNaN(deltaPct)
+      ? '<span style="color:var(--text3)">—</span>'
+      : `<span class="${deltaPct < 0 ? 'pnl-neg' : 'pnl-pos'}">${(deltaPct >= 0 ? '+' : '') + deltaPct.toFixed(4)}%</span>`;
+    return `<tr class="sig-row sig-row-${dirClass}">
+      <td class="metrics-score-col">${scoreBadgeHtml(parseFloat(m.signalScore))}</td>
+      <td>${intervalBadgeHtml(m.interval)}</td>
+      <td>${dirBadgeHtml(m.direction)}</td>
+      <td><span style="font-size:13px;font-family:monospace">${signalKeyToTime(m.signalKey)}</span></td>
+      <td>${isNaN(bodyPct) ? '—' : bodyPct.toFixed(1) + '%'}</td>
+      <td>${deltaHtml}</td>
+      <td>$${fmtPrice(rejWick)}</td>
+      <td>
+        <button class="expand-btn" id="mexp-btn-${safeKey}" onclick="toggleMetricsExpand('${m.signalKey}', this)">
+          <span class="material-icons">expand_more</span>
+        </button>
+      </td>
+    </tr>`;
+  });
+
+  renderCustomTable('metricsTbody', 'metricsEmpty', rows);
+}
+
+function setMetricsMinScore(btn) {
+  metricsMinScore = Number(btn.dataset.val);
+  document.querySelectorAll('#metricsMinScoreGroup .filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderMetricsTable();
+}
+
+function setMetricsIntFilter(btn) {
+  metricsIntFilterVal = btn.dataset.val;
+  document.querySelectorAll('#metricsIntFilter .filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+  renderMetricsTable();
+}
+
+function sortMetrics(col) {
+  if (metricsSortCol === col) {
+    metricsSortDir = metricsSortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    metricsSortCol = col;
+    metricsSortDir = 'desc';
+  }
+  ['score', 'time'].forEach(c => {
+    const el = document.getElementById(`msort-${c}`);
+    if (el) el.textContent = c === metricsSortCol ? (metricsSortDir === 'asc' ? '▲' : '▼') : '';
+  });
+  renderMetricsTable();
 }
 
 // ── Errors (Grid.js) ──
@@ -1198,6 +1473,7 @@ async function loadAll() {
     loadLastSignal(),
     loadLeaderboard(),
     loadSignals(),
+    loadMetrics(),
     loadErrors(),
     loadDirectionBias(),
     loadMostTargetedInterval(),
