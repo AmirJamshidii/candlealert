@@ -116,48 +116,6 @@ export class PolymarketWinnerRepository {
     return parseInt(rows[0].count, 10);
   }
 
-  async getTopSuspects(
-    days: number,
-    limit: number,
-  ): Promise<
-    {
-      walletAddress: string;
-      displayName: string | null;
-      signalCount: number;
-      totalWagered: number;
-      totalPnl: number;
-      btcRatio: number;
-    }[]
-  > {
-    const rows = await this.repo.manager.query(
-      `SELECT pw.wallet_address AS "walletAddress",
-              COALESCE(MAX(wp.display_name), MAX(pw.display_name)) AS "displayName",
-              COUNT(DISTINCT pw.signal_key)::int AS "signalCount",
-              SUM(pw.position_size::numeric) AS "totalWagered",
-              COALESCE(SUM(pw.total_pnl::numeric), 0) AS "totalPnl",
-              COALESCE(
-                CASE WHEN MAX(wp.total_positions) > 0
-                  THEN MAX(wp.btc_updown_positions)::numeric / MAX(wp.total_positions)
-                  ELSE NULL
-                END, 0
-              ) AS "btcRatio"
-       FROM polymarket_winners pw
-       LEFT JOIN wallet_profiles wp ON pw.wallet_address = wp.wallet_address
-       WHERE pw.created_at >= NOW() - ($1 || ' days')::interval
-       GROUP BY pw.wallet_address
-       LIMIT $2`,
-      [days, limit],
-    );
-    return rows.map((r: Record<string, string>) => ({
-      walletAddress: r.walletAddress,
-      displayName: r.displayName ?? null,
-      signalCount: parseInt(r.signalCount, 10),
-      totalWagered: parseFloat(r.totalWagered ?? '0'),
-      totalPnl: parseFloat(r.totalPnl ?? '0'),
-      btcRatio: parseFloat(r.btcRatio ?? '0'),
-    }));
-  }
-
   async getTopSuspectsPersisted(
     days: number,
     limit: number,
