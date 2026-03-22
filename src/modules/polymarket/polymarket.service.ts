@@ -7,6 +7,13 @@ import { WalletProfileRepository } from './wallet-profile.repository';
 import { IWinner, IPosition } from '../telegram/telegram-message.factory';
 import { ReversalDirection } from '../../events/reversal-signal.event';
 import { ErrorLogService } from '../error-log/error-log.service';
+import {
+  evalNewWallet,
+  evalBuyOnly,
+  evalPositionValue,
+  evalConviction,
+  computeSuspectScore,
+} from './suspect-scoring';
 
 interface PolymarketHolder {
   proxyWallet: string;
@@ -37,10 +44,18 @@ interface PolymarketPositionGroup {
 interface PolymarketUserPosition {
   conditionId: string;
   size: number;
+  avgPrice: number;
   currentValue: number;
   realizedPnl: number;
   cashPnl: number;
   eventSlug: string;
+}
+
+interface PolymarketPublicProfile {
+  proxyWallet: string;
+  createdAt: string | null;
+  name: string | null;
+  pseudonym: string | null;
 }
 
 @Injectable()
@@ -90,10 +105,6 @@ export class PolymarketService {
         ),
         this.getTopPositionsByPnl(conditionId, question, outcomeIndex),
       ]);
-
-      void this.recomputeSuspectScores().catch((err) =>
-        this.errorLogService.log(err, { module: 'suspect-scoring' }),
-      );
 
       return { holders, positions };
     } catch (err) {
@@ -227,6 +238,9 @@ export class PolymarketService {
           walletAddress: h.proxyWallet,
           name: h.name || h.pseudonym || null,
         })),
+        conditionId,
+        signalKey,
+        closeTime,
       );
 
       return top.map((h) => ({
@@ -243,127 +257,134 @@ export class PolymarketService {
 
   private async fetchAndStoreWalletProfiles(
     holders: { walletAddress: string; name: string | null }[],
+    conditionId: string,
+    signalKey: string,
+    closeTime: number,
   ): Promise<void> {
-    const profiles = await Promise.all(
-      holders.map((h) =>
-        this.fetchWalletProfile(h.walletAddress, h.name).catch(() => null),
-      ),
-    );
-    const valid = profiles.filter(Boolean);
-    if (valid.length) {
-      await this.walletProfileRepo
-        .upsertMany(valid)
-        .catch((err) =>
-          this.errorLogService.log(err, { module: 'polymarket-profiles' }),
+    const profileUrl = `https://gamma-api.polymarket.com/public-profile`;
+    const positionsUrl = `${this.appConfig.polymarketDataUrl}/positions`;
+    const activityUrl = `${this.appConfig.polymarketDataUrl}/activity`;
+
+    const results = await Promise.all(
+      holders.map(async (h) => {
+        // Run 3 API calls in parallel per wallet
+        const [profileResult, positionsResult, activityResult] = await Promise.all([
+          firstValueFrom(
+            this.httpService.get<PolymarketPublicProfile>(profileUrl, {
+              params: { address: h.walletAddress },
+              timeout: 10_000,
+            }),
+          ).catch((err) => {
+            this.errorLogService.log(err, { module: 'suspect-scoring' });
+            return null;
+          }),
+          firstValueFrom(
+            this.httpService.get<PolymarketUserPosition[]>(positionsUrl, {
+              params: { user: h.walletAddress, limit: 500 },
+              timeout: 15_000,
+            }),
+          ).catch((err) => {
+            this.errorLogService.log(err, { module: 'suspect-scoring' });
+            return null;
+          }),
+          firstValueFrom(
+            this.httpService.get<unknown[]>(activityUrl, {
+              params: { user: h.walletAddress, side: 'SELL', limit: 1 },
+              timeout: 10_000,
+            }),
+          ).catch((err) => {
+            this.errorLogService.log(err, { module: 'suspect-scoring' });
+            return null;
+          }),
+        ]);
+
+        // --- Criterion 1: new wallet (createdAt within 5 days of signal closeTime) ---
+        const createdAtStr = profileResult?.data?.createdAt ?? null;
+        const criterionNewWallet = evalNewWallet(createdAtStr, closeTime);
+
+        // --- Criterion 2: buy-only (zero SELL trades) ---
+        const criterionBuyOnly =
+          activityResult !== null
+            ? evalBuyOnly(Array.isArray(activityResult.data) ? activityResult.data : [])
+            : null;
+
+        // --- Criteria 3 & 4: find position for this signal's market ---
+        let criterionPositionValue: boolean | null = null;
+        let criterionConviction: boolean | null = null;
+        if (positionsResult !== null) {
+          const positions: PolymarketUserPosition[] = Array.isArray(positionsResult.data)
+            ? positionsResult.data
+            : [];
+          const marketPosition = positions.find((p) => p.conditionId === conditionId);
+          if (marketPosition) {
+            criterionPositionValue = evalPositionValue(marketPosition.currentValue);
+            criterionConviction = evalConviction(marketPosition.avgPrice);
+          }
+        }
+
+        // --- Compute score ---
+        const suspectScore = computeSuspectScore(
+          criterionNewWallet,
+          criterionBuyOnly,
+          criterionPositionValue,
+          criterionConviction,
         );
-      this.logger.log(`Stored ${valid.length} wallet profiles`);
-    }
-  }
 
-  private async fetchWalletProfile(
-    address: string,
-    name: string | null = null,
-  ): Promise<{
-    walletAddress: string;
-    displayName: string | null;
-    totalPositions: number;
-    totalCurrentValue: string;
-    totalRealizedPnl: string;
-    totalCashPnl: string;
-    btcUpdownPositions: number;
-    favoriteCategories: { category: string; count: number }[];
-  } | null> {
-    const url = `${this.appConfig.polymarketDataUrl}/positions`;
-    try {
-      const res = await firstValueFrom(
-        this.httpService.get(url, {
-          params: { user: address, limit: 500 },
-          timeout: 15_000,
-        }),
-      );
-      const positions: PolymarketUserPosition[] = Array.isArray(res.data)
-        ? res.data
-        : [];
+        // --- Store wallet profile (reuse positions response) ---
+        if (positionsResult !== null) {
+          const positions: PolymarketUserPosition[] = Array.isArray(positionsResult.data)
+            ? positionsResult.data
+            : [];
+          const totalCurrentValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
+          const totalRealizedPnl = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
+          const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
+          const btcUpdownPositions = positions.filter((p) =>
+            p.eventSlug?.startsWith('btc-updown'),
+          ).length;
+          const categoryCounts: Record<string, number> = {};
+          for (const p of positions) {
+            const cat = p.eventSlug?.split('-')[0] ?? 'other';
+            categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+          }
+          const favoriteCategories = Object.entries(categoryCounts)
+            .map(([category, count]) => ({ category, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
 
-      const totalCurrentValue = positions.reduce(
-        (s, p) => s + (p.currentValue ?? 0),
-        0,
-      );
-      const totalRealizedPnl = positions.reduce(
-        (s, p) => s + (p.realizedPnl ?? 0),
-        0,
-      );
-      const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
-      const btcUpdownPositions = positions.filter((p) =>
-        p.eventSlug?.startsWith('btc-updown'),
-      ).length;
+          await this.walletProfileRepo
+            .upsertMany([{
+              walletAddress: h.walletAddress,
+              displayName: h.name,
+              totalPositions: positions.length,
+              totalCurrentValue: String(totalCurrentValue),
+              totalRealizedPnl: String(totalRealizedPnl),
+              totalCashPnl: String(totalCashPnl),
+              btcUpdownPositions,
+              favoriteCategories,
+            }])
+            .catch((err) =>
+              this.errorLogService.log(err, { module: 'polymarket-profiles' }),
+            );
+        }
 
-      const categoryCounts: Record<string, number> = {};
-      for (const p of positions) {
-        const cat = p.eventSlug?.split('-')[0] ?? 'other';
-        categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
-      }
-      const favoriteCategories = Object.entries(categoryCounts)
-        .map(([category, count]) => ({ category, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-
-      return {
-        walletAddress: address,
-        displayName: name,
-        totalPositions: positions.length,
-        totalCurrentValue: String(totalCurrentValue),
-        totalRealizedPnl: String(totalRealizedPnl),
-        totalCashPnl: String(totalCashPnl),
-        btcUpdownPositions,
-        favoriteCategories,
-      };
-    } catch (err) {
-      this.logger.warn(`Failed to fetch wallet profile for ${address}: ${err}`);
-      return null;
-    }
-  }
-
-  private async recomputeSuspectScores(): Promise<void> {
-    const raw = await this.walletProfileRepo.getAllForScoring();
-    if (!raw.length) return;
-
-    const norm = (val: number, min: number, max: number) =>
-      max === min ? 1 : (val - min) / (max - min);
-
-    const fields = [
-      'signalCount',
-      'winRate',
-      'btcRatio',
-      'totalPnl',
-      'totalWagered',
-    ] as const;
-    const mins = Object.fromEntries(
-      fields.map((f) => [f, Math.min(...raw.map((r) => r[f]))]),
-    );
-    const maxs = Object.fromEntries(
-      fields.map((f) => [f, Math.max(...raw.map((r) => r[f]))]),
+        return {
+          walletAddress: h.walletAddress,
+          signalKey,
+          suspectScore,
+          criterionNewWallet,
+          criterionBuyOnly,
+          criterionPositionValue,
+          criterionConviction,
+        };
+      }),
     );
 
-    const updates = raw.map((r) => {
-      const score =
-        0.25 * norm(r.signalCount, mins.signalCount, maxs.signalCount) +
-        0.25 * norm(r.winRate, mins.winRate, maxs.winRate) +
-        0.2 * norm(r.btcRatio, mins.btcRatio, maxs.btcRatio) +
-        0.15 * norm(r.totalPnl, mins.totalPnl, maxs.totalPnl) +
-        0.15 * norm(r.totalWagered, mins.totalWagered, maxs.totalWagered);
+    // Write all scores in one batch (partial nulls included — never skip)
+    await this.winnerRepo
+      .updateSuspectScores(results)
+      .catch((err) => this.errorLogService.log(err, { module: 'suspect-scoring' }));
 
-      return {
-        walletAddress: r.walletAddress,
-        suspectScore: String(Math.round(score * 100) / 100),
-        winRate: String(Math.round(r.winRate * 100) / 100),
-        signalCount: r.signalCount,
-        totalWagered: String(r.totalWagered),
-      };
-    });
-
-    await this.walletProfileRepo.updateSuspectScores(updates);
-    this.logger.log(`Suspect scores recomputed for ${updates.length} wallets`);
+    this.logger.log(`Suspect scores written for ${results.length} wallets on signal ${signalKey}`);
   }
 
   private async getTopPositionsByPnl(
