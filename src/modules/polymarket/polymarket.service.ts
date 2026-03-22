@@ -241,7 +241,7 @@ export class PolymarketService {
         conditionId,
         signalKey,
         closeTime,
-      );
+      ).catch((err) => this.errorLogService.log(err, { module: 'suspect-scoring' }));
 
       return top.map((h) => ({
         walletAddress: h.proxyWallet,
