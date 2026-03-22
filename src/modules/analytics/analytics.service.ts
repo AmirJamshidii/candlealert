@@ -111,6 +111,10 @@ export class AnalyticsService {
       btcRatio: number;
       winRate: number;
       suspectScore: number;
+      criterionNewWallet: boolean | null;
+      criterionBuyOnly: boolean | null;
+      criterionPositionValue: boolean | null;
+      criterionConviction: boolean | null;
     }[]
   > {
     return this.winnerRepo.getTopSuspectsPersisted(days, limit);
