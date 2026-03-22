@@ -9,6 +9,7 @@ import { PolymarketWinnerEntity } from '../polymarket/polymarket-winner.entity';
 import { AppConfig } from '../../config/app.config';
 import { SignalMetricsRepository } from '../signal-metrics/signal-metrics.repository';
 import { SignalMetricsEntity } from '../signal-metrics/signal-metrics.entity';
+import { CandleBufferService } from '../binance/candle-buffer.service';
 
 interface PolymarketUserPosition {
   conditionId: string;
@@ -40,6 +41,7 @@ export class AnalyticsService {
     private readonly httpService: HttpService,
     private readonly appConfig: AppConfig,
     private readonly signalMetricsRepo: SignalMetricsRepository,
+    private readonly candleBuffer: CandleBufferService,
   ) {}
 
   getSignalSummary(): Promise<{ interval: string; count: number }[]> {
@@ -162,23 +164,13 @@ export class AnalyticsService {
     }[];
     signals: { time: number; direction: string | null }[];
   }> {
-    const url = `${this.appConfig.binanceBaseUrl}/api/v3/klines`;
-
-    const res = await firstValueFrom(
-      this.httpService.get(url, {
-        params: { symbol: 'BTCUSDT', interval, limit },
-        timeout: 10_000,
-      }),
-    );
-
-    const klines: unknown[][] = Array.isArray(res.data) ? res.data : [];
-
-    const candles = klines.map((k) => ({
-      time: Math.floor(parseInt(String(k[0]), 10) / 1000),
-      open: parseFloat(String(k[1])),
-      high: parseFloat(String(k[2])),
-      low: parseFloat(String(k[3])),
-      close: parseFloat(String(k[4])),
+    const buffered = this.candleBuffer.getCandles(interval, limit);
+    const candles = buffered.map((c) => ({
+      time: Math.floor(c.openTime / 1000),
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
     }));
 
     let signals: { time: number; direction: string | null }[] = [];
@@ -253,50 +245,32 @@ export class AnalyticsService {
       };
     }
 
-    // Fall back to Binance API for historical signals without stored metrics
-    const [interval, openTimeStr] = signalKey.split(':');
-    if (!interval || !openTimeStr) return null;
-
-    const openTime = parseInt(openTimeStr, 10);
-    const url = `${this.appConfig.binanceBaseUrl}/api/v3/klines`;
-
-    try {
-      const res = await firstValueFrom(
-        this.httpService.get(url, {
-          params: {
-            symbol: 'BTCUSDT',
-            interval,
-            startTime: openTime,
-            limit: 1,
-          },
-          timeout: 10_000,
-        }),
-      );
-
-      const kline = res.data?.[0];
-      if (!kline) return null;
-
-      const open = parseFloat(kline[1]);
-      const high = parseFloat(kline[2]);
-      const low = parseFloat(kline[3]);
-      const close = parseFloat(kline[4]);
-      const range = high - low;
-
-      return {
-        openTime: parseInt(kline[0], 10),
-        open,
-        high,
-        low,
-        close,
-        volume: parseFloat(kline[5]),
-        closeTime: parseInt(kline[6], 10),
-        bodySize: Math.abs(close - open),
-        wickRatio: range > 0 ? Math.abs(close - open) / range : 0,
-      };
-    } catch (err) {
-      this.logger.error(`Failed to fetch candle for ${signalKey}`, err);
-      return null;
+    // Fall back to in-memory buffer for recent signals
+    const parts = signalKey.split(':');
+    // Signal key format: reversal:BTCUSDT:<interval>:<closeTime>
+    const interval = parts[2];
+    const closeTimeMs = parts[3] ? parseInt(parts[3], 10) : NaN;
+    if (interval && !isNaN(closeTimeMs)) {
+      const intervalMs = this.parseIntervalMs(interval);
+      const openTime = closeTimeMs - intervalMs + 1;
+      const candle = this.candleBuffer.getCandleByOpenTime(interval, openTime);
+      if (candle) {
+        const range = candle.high - candle.low;
+        return {
+          openTime: candle.openTime,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+          volume: candle.volume,
+          closeTime: candle.closeTime,
+          bodySize: Math.abs(candle.close - candle.open),
+          wickRatio: range > 0 ? Math.abs(candle.close - candle.open) / range : 0,
+        };
+      }
     }
+
+    return null;
   }
 
   async getWalletProfile(address: string): Promise<{
