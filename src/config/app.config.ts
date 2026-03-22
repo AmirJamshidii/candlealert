@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_TELEGRAM_PROMPT,
+} from '../modules/ai/prompts.constants';
 
 @Injectable()
 export class AppConfig {
@@ -67,5 +71,13 @@ export class AppConfig {
   }
   get nodeEnv(): string {
     return this.configService.get<string>('NODE_ENV');
+  }
+
+  get systemPrompt(): string {
+    return this.configService.get<string>('SYSTEM_PROMPT') ?? DEFAULT_SYSTEM_PROMPT;
+  }
+
+  get telegramPrompt(): string {
+    return this.configService.get<string>('TELEGRAM_PROMPT') ?? DEFAULT_TELEGRAM_PROMPT;
   }
 }

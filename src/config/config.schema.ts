@@ -32,6 +32,10 @@ export const configValidationSchema = Joi.object({
   // Testing
   SIGNAL_TEST_MODE: Joi.boolean().default(false),
 
+  // Prompts
+  SYSTEM_PROMPT: Joi.string().optional(),
+  TELEGRAM_PROMPT: Joi.string().optional(),
+
   // App
   PORT: Joi.number().default(3000),
   NODE_ENV: Joi.string()
