@@ -207,6 +207,42 @@ export class PolymarketWinnerRepository {
     }));
   }
 
+  async updateSuspectScores(
+    updates: Array<{
+      walletAddress: string;
+      signalKey: string;
+      suspectScore: number;
+      criterionNewWallet: boolean | null;
+      criterionBuyOnly: boolean | null;
+      criterionPositionValue: boolean | null;
+      criterionConviction: boolean | null;
+    }>,
+  ): Promise<void> {
+    if (!updates.length) return;
+    await Promise.all(
+      updates.map((u) =>
+        this.repo.manager.query(
+          `UPDATE polymarket_winners
+           SET suspect_score            = $1,
+               criterion_new_wallet     = $2,
+               criterion_buy_only       = $3,
+               criterion_position_value = $4,
+               criterion_conviction     = $5
+           WHERE wallet_address = $6 AND signal_key = $7`,
+          [
+            u.suspectScore,
+            u.criterionNewWallet,
+            u.criterionBuyOnly,
+            u.criterionPositionValue,
+            u.criterionConviction,
+            u.walletAddress,
+            u.signalKey,
+          ],
+        ),
+      ),
+    );
+  }
+
   async getWinRateLeaderboard(
     days: number,
     limit: number,
