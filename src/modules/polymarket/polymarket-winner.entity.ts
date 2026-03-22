@@ -54,4 +54,19 @@ export class PolymarketWinnerEntity {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true })
+  suspectScore: string | null;
+
+  @Column({ nullable: true })
+  criterionNewWallet: boolean | null;
+
+  @Column({ nullable: true })
+  criterionBuyOnly: boolean | null;
+
+  @Column({ nullable: true })
+  criterionPositionValue: boolean | null;
+
+  @Column({ nullable: true })
+  criterionConviction: boolean | null;
 }

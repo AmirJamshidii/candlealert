@@ -116,48 +116,6 @@ export class PolymarketWinnerRepository {
     return parseInt(rows[0].count, 10);
   }
 
-  async getTopSuspects(
-    days: number,
-    limit: number,
-  ): Promise<
-    {
-      walletAddress: string;
-      displayName: string | null;
-      signalCount: number;
-      totalWagered: number;
-      totalPnl: number;
-      btcRatio: number;
-    }[]
-  > {
-    const rows = await this.repo.manager.query(
-      `SELECT pw.wallet_address AS "walletAddress",
-              COALESCE(MAX(wp.display_name), MAX(pw.display_name)) AS "displayName",
-              COUNT(DISTINCT pw.signal_key)::int AS "signalCount",
-              SUM(pw.position_size::numeric) AS "totalWagered",
-              COALESCE(SUM(pw.total_pnl::numeric), 0) AS "totalPnl",
-              COALESCE(
-                CASE WHEN MAX(wp.total_positions) > 0
-                  THEN MAX(wp.btc_updown_positions)::numeric / MAX(wp.total_positions)
-                  ELSE NULL
-                END, 0
-              ) AS "btcRatio"
-       FROM polymarket_winners pw
-       LEFT JOIN wallet_profiles wp ON pw.wallet_address = wp.wallet_address
-       WHERE pw.created_at >= NOW() - ($1 || ' days')::interval
-       GROUP BY pw.wallet_address
-       LIMIT $2`,
-      [days, limit],
-    );
-    return rows.map((r: Record<string, string>) => ({
-      walletAddress: r.walletAddress,
-      displayName: r.displayName ?? null,
-      signalCount: parseInt(r.signalCount, 10),
-      totalWagered: parseFloat(r.totalWagered ?? '0'),
-      totalPnl: parseFloat(r.totalPnl ?? '0'),
-      btcRatio: parseFloat(r.btcRatio ?? '0'),
-    }));
-  }
-
   async getTopSuspectsPersisted(
     days: number,
     limit: number,
@@ -171,27 +129,48 @@ export class PolymarketWinnerRepository {
       btcRatio: number;
       winRate: number;
       suspectScore: number;
+      criterionNewWallet: boolean | null;
+      criterionBuyOnly: boolean | null;
+      criterionPositionValue: boolean | null;
+      criterionConviction: boolean | null;
     }[]
   > {
     const rows = await this.repo.manager.query(
-      `SELECT pw.wallet_address AS "walletAddress",
-              COALESCE(MAX(wp.display_name), MAX(pw.display_name)) AS "displayName",
-              COUNT(DISTINCT pw.signal_key)::int AS "signalCount",
-              SUM(pw.position_size::numeric) AS "totalWagered",
-              COALESCE(SUM(pw.total_pnl::numeric), 0) AS "totalPnl",
-              COALESCE(
-                CASE WHEN MAX(wp.total_positions) > 0
-                  THEN MAX(wp.btc_updown_positions)::numeric / MAX(wp.total_positions)
-                  ELSE 0
-                END, 0
-              ) AS "btcRatio",
-              COALESCE(wp.win_rate::numeric, 0) AS "winRate",
-              COALESCE(wp.suspect_score::numeric, 0) AS "suspectScore"
-       FROM polymarket_winners pw
-       LEFT JOIN wallet_profiles wp ON pw.wallet_address = wp.wallet_address
-       WHERE pw.created_at >= NOW() - ($1 || ' days')::interval
-       GROUP BY pw.wallet_address, wp.win_rate, wp.suspect_score
-       ORDER BY COALESCE(wp.suspect_score::numeric, 0) DESC
+      `SELECT
+         pw_all.wallet_address AS "walletAddress",
+         COALESCE(MAX(wp.display_name), MAX(pw_all.display_name)) AS "displayName",
+         COUNT(DISTINCT pw_all.signal_key)::int AS "signalCount",
+         SUM(pw_all.position_size::numeric) AS "totalWagered",
+         COALESCE(SUM(pw_all.total_pnl::numeric), 0) AS "totalPnl",
+         COALESCE(
+           CASE WHEN MAX(wp.total_positions) > 0
+             THEN MAX(wp.btc_updown_positions)::numeric / MAX(wp.total_positions)
+             ELSE 0
+           END, 0
+         ) AS "btcRatio",
+         COALESCE(MAX(wp.win_rate)::numeric, 0) AS "winRate",
+         COALESCE(MAX(pw_all.suspect_score)::numeric, 0) AS "suspectScore",
+         best.criterion_new_wallet AS "criterionNewWallet",
+         best.criterion_buy_only AS "criterionBuyOnly",
+         best.criterion_position_value AS "criterionPositionValue",
+         best.criterion_conviction AS "criterionConviction"
+       FROM polymarket_winners pw_all
+       LEFT JOIN wallet_profiles wp ON pw_all.wallet_address = wp.wallet_address
+       JOIN LATERAL (
+         SELECT criterion_new_wallet, criterion_buy_only,
+                criterion_position_value, criterion_conviction
+         FROM polymarket_winners
+         WHERE wallet_address = pw_all.wallet_address
+         ORDER BY suspect_score DESC NULLS LAST
+         LIMIT 1
+       ) best ON true
+       WHERE pw_all.created_at >= NOW() - ($1 || ' days')::interval
+       GROUP BY pw_all.wallet_address,
+                best.criterion_new_wallet,
+                best.criterion_buy_only,
+                best.criterion_position_value,
+                best.criterion_conviction
+       ORDER BY COALESCE(MAX(pw_all.suspect_score)::numeric, 0) DESC NULLS LAST
        LIMIT $2`,
       [days, limit],
     );
@@ -204,7 +183,47 @@ export class PolymarketWinnerRepository {
       btcRatio: parseFloat(r.btcRatio ?? '0'),
       winRate: parseFloat(r.winRate ?? '0'),
       suspectScore: parseFloat(r.suspectScore ?? '0'),
+      criterionNewWallet: r.criterionNewWallet === null ? null : r.criterionNewWallet === 'true' || (r.criterionNewWallet as unknown) === true,
+      criterionBuyOnly: r.criterionBuyOnly === null ? null : r.criterionBuyOnly === 'true' || (r.criterionBuyOnly as unknown) === true,
+      criterionPositionValue: r.criterionPositionValue === null ? null : r.criterionPositionValue === 'true' || (r.criterionPositionValue as unknown) === true,
+      criterionConviction: r.criterionConviction === null ? null : r.criterionConviction === 'true' || (r.criterionConviction as unknown) === true,
     }));
+  }
+
+  async updateSuspectScores(
+    updates: Array<{
+      walletAddress: string;
+      signalKey: string;
+      suspectScore: number;
+      criterionNewWallet: boolean | null;
+      criterionBuyOnly: boolean | null;
+      criterionPositionValue: boolean | null;
+      criterionConviction: boolean | null;
+    }>,
+  ): Promise<void> {
+    if (!updates.length) return;
+    await Promise.all(
+      updates.map((u) =>
+        this.repo.manager.query(
+          `UPDATE polymarket_winners
+           SET suspect_score            = $1,
+               criterion_new_wallet     = $2,
+               criterion_buy_only       = $3,
+               criterion_position_value = $4,
+               criterion_conviction     = $5
+           WHERE wallet_address = $6 AND signal_key = $7`,
+          [
+            u.suspectScore,
+            u.criterionNewWallet,
+            u.criterionBuyOnly,
+            u.criterionPositionValue,
+            u.criterionConviction,
+            u.walletAddress,
+            u.signalKey,
+          ],
+        ),
+      ),
+    );
   }
 
   async getWinRateLeaderboard(
