@@ -34,6 +34,7 @@ Add two optional query parameters:
 
 **Behavior when `since`/`until` are provided:**
 - Skip the buffer candle lookup entirely.
+- The controller converts both params to milliseconds (`since * 1000`, `until * 1000`) before passing to the repository, since the `alerts` table stores timestamps in milliseconds.
 - Query `alerts` table for signals in the given interval and time range.
 - Return `{ candles: [], signals: [...] }`.
 
@@ -42,7 +43,7 @@ Add two optional query parameters:
 Files affected:
 - `src/modules/analytics/analytics.controller.ts` — add `@Query('since')` and `@Query('until')` params
 - `src/modules/analytics/analytics.service.ts` — branch on params presence; reuse existing `alertRepo.getSignalsByIntervalSince()` with an added upper bound
-- `src/modules/alert/alert.repository.ts` — add `until` support to `getSignalsByIntervalSince` (or add a new `getSignalsByIntervalBetween` method)
+- `src/modules/alert/alert.repository.ts` — add a new `getSignalsByIntervalBetween(interval, sinceMs, untilMs)` method. Do not modify the existing `getSignalsByIntervalSince` to avoid breaking the current no-param code path.
 
 ## Frontend Changes (`public/index.html`)
 
@@ -50,11 +51,14 @@ Files affected:
 
 ```javascript
 let allCandles = [];          // full accumulated candle array
+let allSignals = [];          // full accumulated signal markers array
 let oldestCandleTime = null;  // Unix seconds of oldest loaded candle
 let isFetchingHistory = false; // dedup guard
 ```
 
-Reset all three in `setPriceInterval()` before reloading.
+Reset all four in `setPriceInterval()` before reloading.
+
+Because `candleSeries.setData()` replaces the full series on every scroll batch, `setMarkers()` must also be called with the full `allSignals` array after every `setData()` call — not just with the new batch's markers.
 
 ### `loadPriceChart()` rewrite
 
@@ -72,7 +76,7 @@ Reset all three in `setPriceInterval()` before reloading.
    GET /api/analytics/btc/candles?interval=<interval>&since=<oldest>&until=<newest>
    ```
    Use only the `signals` array from the response.
-5. Apply signal markers (gold border + circle marker) — same logic as today.
+5. Map signals to markers, store in `allSignals`. Apply via `candleSeries.setMarkers(allSignals)` (same gold border + circle logic as today).
 6. Subscribe to `visibleLogicalRangeChanged` for lazy loading.
 
 ### New `fetchOlderCandles()` function
@@ -86,15 +90,15 @@ Called when: range.from < 10 and !isFetchingHistory
    ```
    GET https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=<interval>&limit=500&endTime=<ms>
    ```
-3. If response is empty or fewer than 2 candles: unsubscribe the scroll listener (reached Binance history limit).
-4. Fetch signals for the batch range from backend (`since`/`until`).
-5. Prepend new candles to `allCandles`, call `candleSeries.setData(allCandles)`.
+3. If response has fewer than 2 candles: unsubscribe the scroll listener (reached Binance history limit). The threshold is 2 rather than 0 because a single candle could be the boundary candle already present in `allCandles`, so receiving 0–1 candles reliably indicates no more history.
+4. Fetch signals for the batch range from backend (`since`/`until`). Map to markers, prepend to `allSignals` (sort by `time` ascending).
+5. Prepend deduped candles to `allCandles`, call `candleSeries.setData(allCandles)`, then call `candleSeries.setMarkers(allSignals)` to re-apply all accumulated markers.
 6. Update `oldestCandleTime = allCandles[0].time`.
 7. Set `isFetchingHistory = false`, hide loading indicator.
 
 ### Loading indicator
 
-A small text label (e.g. "Loading history...") rendered in the chart card header right side, visible only while `isFetchingHistory = true`. No new DOM elements needed — toggle visibility on the existing `chart-card-header-right` area or add a dedicated `<span id="priceChartLoading">`.
+Add `<span id="priceChartLoading" style="display:none">Loading history...</span>` inside the existing `chart-card-header-right` div for the price chart. Toggle `display` between `none` and `inline` while `isFetchingHistory` is true.
 
 ### `visibleLogicalRangeChanged` subscription lifecycle
 
@@ -120,7 +124,8 @@ The existing `time` field in Lightweight Charts is Unix seconds (integer). `open
 
 ## Edge Cases
 
-- **Duplicate candles**: Binance `endTime` is exclusive on the upper bound so candles won't overlap between batches, but `allCandles` dedup by `time` should be applied before `setData` to be safe.
+- **Duplicate candles**: Binance `endTime` is exclusive on the upper bound so candles won't overlap between batches, but as a safety measure filter the new batch before prepending: `const existingTimes = new Set(allCandles.map(c => c.time)); const deduped = newBatch.filter(c => !existingTimes.has(c.time));`
 - **Rate limits**: Binance public API allows 1200 requests/minute with weight-based limiting. Fetching 500 candles costs weight=2. The scroll guard (`isFetchingHistory`) ensures at most one in-flight request at a time.
-- **Interval change mid-scroll**: `setPriceInterval()` resets all state and cancels the current listener before reloading — no stale data risk.
+- **Interval change mid-scroll**: `setPriceInterval()` resets all state and cancels the current listener before reloading. Any in-flight `fetchOlderCandles()` call will resolve after the chart is rebuilt; the stale `candleSeries.setData()` call is harmless because `setPriceInterval()` replaces the series instance, making the old reference a no-op.
 - **No signals for old candles**: Expected and correct. Only candles where CandleAlert was running and recorded a reversal will show markers.
+- **Signal fetch errors (scroll batches)**: If the backend signal fetch fails during `fetchOlderCandles`, swallow the error silently — show the candles without markers rather than blocking the user. Log the error to console. The initial load signal fetch follows the same policy.
