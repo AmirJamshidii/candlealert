@@ -105,4 +105,23 @@ export class AlertRepository {
       direction: r.direction,
     }));
   }
+
+  async getSignalsByIntervalBetween(
+    interval: string,
+    sinceCloseMs: number,
+    untilCloseMs: number,
+  ): Promise<{ candleCloseTimeMs: number; direction: string | null }[]> {
+    const rows = await this.repo.manager.query(
+      `SELECT DISTINCT candle_close_time AS "candleCloseTime", direction
+       FROM alerts
+       WHERE interval = $1
+         AND candle_close_time >= $2
+         AND candle_close_time <= $3`,
+      [interval, sinceCloseMs, untilCloseMs],
+    );
+    return rows.map((r: Record<string, string>) => ({
+      candleCloseTimeMs: parseInt(r.candleCloseTime, 10),
+      direction: r.direction,
+    }));
+  }
 }

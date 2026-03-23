@@ -154,6 +154,8 @@ export class AnalyticsService {
   async getBtcCandles(
     interval: string,
     limit: number,
+    since?: number,
+    until?: number,
   ): Promise<{
     candles: {
       time: number;
@@ -164,6 +166,24 @@ export class AnalyticsService {
     }[];
     signals: { time: number; direction: string | null }[];
   }> {
+    if (since !== undefined && until !== undefined) {
+      const intervalMs = this.parseIntervalMs(interval);
+      // since/until are candle open times in Unix seconds
+      // candle_close_time = open_time_ms + intervalMs - 1
+      const sinceCloseMs = since * 1000 + intervalMs - 1;
+      const untilCloseMs = until * 1000 + intervalMs - 1;
+      const rows = await this.alertRepo.getSignalsByIntervalBetween(
+        interval,
+        sinceCloseMs,
+        untilCloseMs,
+      );
+      const signals = rows.map((r) => ({
+        time: Math.floor((r.candleCloseTimeMs - intervalMs + 1) / 1000),
+        direction: r.direction,
+      }));
+      return { candles: [], signals };
+    }
+
     const buffered = this.candleBuffer.getCandles(interval, limit);
     const candles = buffered.map((c) => ({
       time: Math.floor(c.openTime / 1000),

@@ -354,6 +354,44 @@ describe('Analytics API (e2e)', () => {
       expect(err).toHaveProperty('createdAt');
     });
   });
+
+  // ── /api/analytics/btc/candles with since/until ──────────────────────────────
+
+  describe('GET /api/analytics/btc/candles with since/until params', () => {
+    // close_time = open_time + interval_ms - 1
+    // 1709999700 sec * 1000 + 300000 - 1 = 1709999999999 ms
+    const closeTimeMs = 1709999999999;
+    const openTimeSec = 1709999700; // Math.floor((closeTimeMs - 300000 + 1) / 1000)
+
+    beforeEach(async () => {
+      await dataSource.query(`
+        INSERT INTO alerts (signal_key, chat_id, interval, candle_close_time, direction)
+        VALUES ('range_test_signal', '999', '5m', ${closeTimeMs}, 'green_to_red')
+      `);
+    });
+
+    it('returns empty candles and the matching signal when since/until provided', async () => {
+      const res = await request(app.getHttpServer())
+        .get(
+          `/api/analytics/btc/candles?interval=5m&since=${openTimeSec}&until=${openTimeSec}`,
+        )
+        .expect(200);
+
+      expect(res.body.candles).toEqual([]);
+      expect(res.body.signals).toHaveLength(1);
+      expect(res.body.signals[0].time).toBe(openTimeSec);
+      expect(res.body.signals[0].direction).toBe('green_to_red');
+    });
+
+    it('returns empty signals when range has no matching alerts', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/analytics/btc/candles?interval=5m&since=1000&until=2000')
+        .expect(200);
+
+      expect(res.body.candles).toEqual([]);
+      expect(res.body.signals).toEqual([]);
+    });
+  });
 });
 
 // ── Suite 1b: wallets/top-suspects with persisted scores ─────────────────────

@@ -225,6 +225,18 @@ export class AnalyticsController {
     type: Number,
     description: 'Number of candles (default 200)',
   })
+  @ApiQuery({
+    name: 'since',
+    required: false,
+    type: Number,
+    description: 'Candle open time lower bound (Unix seconds). When both since and until are provided, returns signals only (candles: []).',
+  })
+  @ApiQuery({
+    name: 'until',
+    required: false,
+    type: Number,
+    description: 'Candle open time upper bound (Unix seconds).',
+  })
   @ApiResponse({
     status: 200,
     schema: {
@@ -245,10 +257,14 @@ export class AnalyticsController {
   getBtcCandles(
     @Query('interval') interval?: string,
     @Query('limit') limit?: string,
+    @Query('since') since?: string,
+    @Query('until') until?: string,
   ) {
     return this.analyticsService.getBtcCandles(
       interval ?? '5m',
       limit ? parseInt(limit, 10) : 200,
+      since !== undefined && Number.isFinite(+since) ? parseInt(since, 10) : undefined,
+      until !== undefined && Number.isFinite(+until) ? parseInt(until, 10) : undefined,
     );
   }
 
