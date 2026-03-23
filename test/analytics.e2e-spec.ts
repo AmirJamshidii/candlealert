@@ -370,6 +370,12 @@ describe('Analytics API (e2e)', () => {
       `);
     });
 
+    afterEach(async () => {
+      await dataSource.query(
+        `DELETE FROM alerts WHERE signal_key = 'range_test_signal'`,
+      );
+    });
+
     it('returns empty candles and the matching signal when since/until provided', async () => {
       const res = await request(app.getHttpServer())
         .get(

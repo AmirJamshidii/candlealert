@@ -886,6 +886,7 @@ async function loadPriceChart() {
 }
 
 async function fetchOlderCandles() {
+  const capturedInterval = priceInterval;
   isFetchingHistory = true;
   document.getElementById('priceChartLoading').style.display = 'inline';
   try {
@@ -919,6 +920,9 @@ async function fetchOlderCandles() {
 
     // Fetch signals for this batch from backend (silent on error — show candles without markers)
     const batchSignals = await fetchSignalsForRange(priceInterval, batchOldest, batchNewest);
+
+    // Bail if interval changed while we were fetching
+    if (priceInterval !== capturedInterval) return;
 
     // Prepend candles and signals, re-render
     allCandles = [...deduped, ...allCandles];
