@@ -468,6 +468,7 @@
           <div class="chart-card-header">
             <span class="material-icons" style="color:var(--primary)">candlestick_chart</span>
             BTC Live Price
+            <span id="priceChartLoading" style="display:none;font-size:12px;color:var(--text2)">Loading history...</span>
             <div class="chart-card-header-right" id="priceIntervalTabs"></div>
           </div>
           <div class="chart-card-body" style="padding:0"><div id="priceChart" style="height:260px"></div></div>
@@ -634,6 +635,12 @@ const grids = {};
 let signalPeriod = 'today';
 let priceInterval = null;
 let priceChartInstance = null;
+let candleSeriesRef = null;           // module-level ref so fetchOlderCandles can reach it
+let allCandles = [];                  // full accumulated candle array
+let allSignals = [];                  // full accumulated signal markers array
+let oldestCandleTime = null;          // Unix seconds of oldest loaded candle
+let isFetchingHistory = false;        // dedup guard for scroll loads
+let priceChartScrollUnsubscribe = null; // call to detach the scroll listener
 let topWalletsDays = 1;
 let dirBiasData = null;
 let signalSummaryData = null;
@@ -775,6 +782,39 @@ function setSignalPeriod(period) {
   void loadSignalCount();
 }
 
+
+// ── Chart helpers ──
+
+async function fetchSignalsForRange(interval, sinceTimeSec, untilTimeSec) {
+  try {
+    const d = await fetchJSON(
+      `/api/analytics/btc/candles?interval=${interval}&since=${sinceTimeSec}&until=${untilTimeSec}`,
+    );
+    if (!d || !d.signals) return [];
+    return d.signals.map(s => ({
+      time: s.time,
+      position: s.direction === 'green_to_red' ? 'aboveBar' : 'belowBar',
+      color: '#fbbc04',
+      shape: 'circle',
+      text: s.direction === 'green_to_red' ? 'G→R' : 'R→G',
+    }));
+  } catch (e) {
+    console.error('[PriceChart] signal fetch failed', e);
+    return [];
+  }
+}
+
+function applyChartData() {
+  if (!candleSeriesRef || allCandles.length === 0) return;
+  const signalTimes = new Set(allSignals.map(s => s.time));
+  const candleData = allCandles.map(c =>
+    signalTimes.has(c.time) ? { ...c, borderColor: '#fbbc04', wickColor: '#fbbc04' } : c,
+  );
+  candleSeriesRef.setData(candleData);
+  if (allSignals.length > 0) {
+    candleSeriesRef.setMarkers([...allSignals].sort((a, b) => a.time - b.time));
+  }
+}
 
 // ── BTC Live Price chart ──
 async function loadPriceChart() {
