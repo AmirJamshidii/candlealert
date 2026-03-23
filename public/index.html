@@ -468,7 +468,7 @@
           <div class="chart-card-header">
             <span class="material-icons" style="color:var(--primary)">candlestick_chart</span>
             BTC Live Price
-            <span id="priceChartLoading" style="display:none;font-size:12px;color:var(--text2)">Loading history...</span>
+            <span id="priceChartLoading" style="display:none;font-size:12px;color:var(--text2);margin-right:8px">Loading history...</span>
             <div class="chart-card-header-right" id="priceIntervalTabs"></div>
           </div>
           <div class="chart-card-body" style="padding:0"><div id="priceChart" style="height:260px"></div></div>
@@ -641,6 +641,7 @@ let allSignals = [];                  // full accumulated signal markers array
 let oldestCandleTime = null;          // Unix seconds of oldest loaded candle
 let isFetchingHistory = false;        // dedup guard for scroll loads
 let priceChartScrollUnsubscribe = null; // call to detach the scroll listener
+let priceChartResizeObserver = null;    // track observer so we can disconnect on reload
 let topWalletsDays = 1;
 let dirBiasData = null;
 let signalSummaryData = null;
@@ -877,13 +878,72 @@ async function loadPriceChart() {
     }
   };
 
-  const ro = new ResizeObserver(() => {
+  if (priceChartResizeObserver) priceChartResizeObserver.disconnect();
+  priceChartResizeObserver = new ResizeObserver(() => {
     if (priceChartInstance) priceChartInstance.applyOptions({ width: container.clientWidth });
   });
-  ro.observe(container);
+  priceChartResizeObserver.observe(container);
+}
+
+async function fetchOlderCandles() {
+  isFetchingHistory = true;
+  document.getElementById('priceChartLoading').style.display = 'inline';
+  try {
+    const endTime = oldestCandleTime * 1000 - 1;
+    const res = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${priceInterval}&limit=500&endTime=${endTime}`,
+    );
+    const raw = await res.json();
+
+    if (!Array.isArray(raw) || raw.length < 2) {
+      // Reached the end of Binance history — stop listening
+      if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
+      return;
+    }
+
+    const newBatch = raw.map(r => ({
+      time: Math.floor(r[0] / 1000),
+      open: +r[1], high: +r[2], low: +r[3], close: +r[4],
+    }));
+
+    // Dedup: Binance endTime is exclusive but guard anyway
+    const existingTimes = new Set(allCandles.map(c => c.time));
+    const deduped = newBatch.filter(c => !existingTimes.has(c.time));
+    if (deduped.length === 0) {
+      if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
+      return;
+    }
+
+    const batchOldest = deduped[0].time;
+    const batchNewest = deduped[deduped.length - 1].time;
+
+    // Fetch signals for this batch from backend (silent on error — show candles without markers)
+    const batchSignals = await fetchSignalsForRange(priceInterval, batchOldest, batchNewest);
+
+    // Prepend candles and signals, re-render
+    allCandles = [...deduped, ...allCandles];
+    allSignals = [...batchSignals, ...allSignals].sort((a, b) => a.time - b.time);
+    oldestCandleTime = allCandles[0].time;
+
+    applyChartData();
+  } catch (e) {
+    console.error('[PriceChart] fetchOlderCandles failed', e);
+  } finally {
+    isFetchingHistory = false;
+    document.getElementById('priceChartLoading').style.display = 'none';
+  }
 }
 
 function setPriceInterval(interval) {
+  // Detach scroll listener and reset all chart state before reload
+  if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
+  if (priceChartResizeObserver) { priceChartResizeObserver.disconnect(); priceChartResizeObserver = null; }
+  allCandles = [];
+  allSignals = [];
+  oldestCandleTime = null;
+  isFetchingHistory = false;
+  candleSeriesRef = null;
+
   priceInterval = interval;
   document.querySelectorAll('#priceIntervalTabs .range-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.interval === interval);
