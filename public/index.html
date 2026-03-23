@@ -819,8 +819,6 @@ function applyChartData() {
 // ── BTC Live Price chart ──
 async function loadPriceChart() {
   if (!priceInterval) return;
-  const d = await fetchJSON(`/api/analytics/btc/candles?interval=${priceInterval}&limit=200`);
-  if (!d || !d.candles) return;
 
   const container = document.getElementById('priceChart');
   if (priceChartInstance) { priceChartInstance.remove(); priceChartInstance = null; }
@@ -835,38 +833,49 @@ async function loadPriceChart() {
     timeScale: { borderColor: '#3c3c3c', timeVisible: true, secondsVisible: false },
   });
 
-  const candleSeries = priceChartInstance.addCandlestickSeries({
+  candleSeriesRef = priceChartInstance.addCandlestickSeries({
     upColor: '#34a853', downColor: '#ea4335',
     borderUpColor: '#34a853', borderDownColor: '#ea4335',
     wickUpColor: '#34a853', wickDownColor: '#ea4335',
   });
 
-  // Build signal lookup for per-candle badge coloring
-  const signalMap = new Map((d.signals || []).map(s => [s.time, s.direction]));
-
-  const candleData = d.candles.map(c => {
-    if (!signalMap.has(c.time)) return c;
-    // Signal candle: gold border + wick to make it stand out
-    return { ...c, borderColor: '#fbbc04', wickColor: '#fbbc04' };
-  });
-
-  candleSeries.setData(candleData);
-
-  if (signalMap.size > 0) {
-    const markers = [...signalMap.entries()]
-      .filter(([time]) => time)
-      .sort(([a], [b]) => a - b)
-      .map(([time, direction]) => ({
-        time,
-        position: direction === 'green_to_red' ? 'aboveBar' : 'belowBar',
-        color: '#fbbc04',
-        shape: 'circle',
-        text: direction === 'green_to_red' ? 'G→R' : 'R→G',
-      }));
-    candleSeries.setMarkers(markers);
+  // Fetch 500 candles from Binance directly (public API, no auth)
+  let raw;
+  try {
+    const res = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${priceInterval}&limit=500`,
+    );
+    raw = await res.json();
+  } catch (e) {
+    console.error('[PriceChart] Binance initial fetch failed', e);
+    return;
   }
+  if (!Array.isArray(raw) || raw.length === 0) return;
 
+  allCandles = raw.map(r => ({
+    time: Math.floor(r[0] / 1000),
+    open: +r[1], high: +r[2], low: +r[3], close: +r[4],
+  }));
+  oldestCandleTime = allCandles[0].time;
+  const newestCandleTime = allCandles[allCandles.length - 1].time;
+
+  // Fetch signals for the initial range from backend
+  allSignals = await fetchSignalsForRange(priceInterval, oldestCandleTime, newestCandleTime);
+
+  applyChartData();
   priceChartInstance.timeScale().fitContent();
+
+  // Infinite scroll: fetch older candles when user scrolls near the left edge
+  const scrollHandler = async (range) => {
+    if (!range || range.from > 10 || isFetchingHistory) return;
+    await fetchOlderCandles();
+  };
+  priceChartInstance.timeScale().subscribeVisibleLogicalRangeChange(scrollHandler);
+  priceChartScrollUnsubscribe = () => {
+    if (priceChartInstance) {
+      priceChartInstance.timeScale().unsubscribeVisibleLogicalRangeChange(scrollHandler);
+    }
+  };
 
   const ro = new ResizeObserver(() => {
     if (priceChartInstance) priceChartInstance.applyOptions({ width: container.clientWidth });
