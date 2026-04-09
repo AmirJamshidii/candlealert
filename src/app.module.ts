@@ -12,6 +12,7 @@ import { PolymarketModule } from './modules/polymarket/polymarket.module';
 import { AlertModule } from './modules/alert/alert.module';
 import { HealthModule } from './modules/health/health.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { MarketsModule } from './modules/markets/markets.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     AlertModule,
     HealthModule,
     AnalyticsModule,
+    MarketsModule,
   ],
 })
 export class AppModule {}

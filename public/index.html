@@ -379,6 +379,15 @@
     /* ── Signal Metrics section ── */
     .metrics-filter-bar { display: flex; gap: 12px; padding: 0 20px 12px; flex-wrap: wrap; align-items: center; }
     .metrics-score-col  { min-width: 56px; text-align: center; }
+
+    /* ── Stacked BTC / ETH price charts ── */
+    .price-chart-split { border-bottom: 1px solid var(--border); }
+    .price-chart-split:last-child { border-bottom: none; }
+    .price-chart-label {
+      font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text2); padding: 10px 16px 0;
+    }
+    .price-chart-pane { height: 240px; width: 100%; }
   </style>
 </head>
 <body>
@@ -467,11 +476,20 @@
         <div class="chart-card">
           <div class="chart-card-header">
             <span class="material-icons" style="color:var(--primary)">candlestick_chart</span>
-            BTC Live Price
+            BTC &amp; ETH — Live Price
             <span id="priceChartLoading" style="display:none;font-size:12px;color:var(--text2);margin-right:8px">Loading history...</span>
             <div class="chart-card-header-right" id="priceIntervalTabs"></div>
           </div>
-          <div class="chart-card-body" style="padding:0"><div id="priceChart" style="height:260px"></div></div>
+          <div class="chart-card-body" style="padding:0" id="priceChartsWrap">
+            <div class="price-chart-split">
+              <div class="price-chart-label">BTC / USDT</div>
+              <div id="priceChart" class="price-chart-pane"></div>
+            </div>
+            <div class="price-chart-split">
+              <div class="price-chart-label">ETH / USDT</div>
+              <div id="ethPriceChart" class="price-chart-pane"></div>
+            </div>
+          </div>
         </div>
         <div class="chart-card">
           <div class="chart-card-header">
@@ -642,6 +660,13 @@ let oldestCandleTime = null;          // Unix seconds of oldest loaded candle
 let isFetchingHistory = false;        // dedup guard for scroll loads
 let priceChartScrollUnsubscribe = null; // call to detach the scroll listener
 let priceChartResizeObserver = null;    // track observer so we can disconnect on reload
+let ethPriceChartInstance = null;
+let ethCandleSeriesRef = null;
+let ethAllCandles = [];
+let priceChartsSyncing = false;
+let priceHistorySessionId = 0;
+let isHistoryPreloading = false;
+const PRICE_HISTORY_TARGET_SECONDS = 90 * 24 * 60 * 60; // ~3 months
 let topWalletsDays = 1;
 let dirBiasData = null;
 let signalSummaryData = null;
@@ -812,77 +837,270 @@ function applyChartData() {
     signalTimes.has(c.time) ? { ...c, borderColor: '#fbbc04', wickColor: '#fbbc04' } : c,
   );
   candleSeriesRef.setData(candleData);
-  if (allSignals.length > 0) {
-    candleSeriesRef.setMarkers([...allSignals].sort((a, b) => a.time - b.time));
+  candleSeriesRef.setMarkers(
+    allSignals.length > 0 ? [...allSignals].sort((a, b) => a.time - b.time) : [],
+  );
+}
+
+function applyEthChartData() {
+  if (!ethCandleSeriesRef || ethAllCandles.length === 0) return;
+  ethCandleSeriesRef.setData(ethAllCandles);
+}
+
+/** Align two candle arrays to the same `time` keys (Binance batches can differ slightly). */
+function alignCandleBatches(btcArr, ethArr) {
+  const em = new Map(ethArr.map((c) => [c.time, c]));
+  const b = [];
+  const e = [];
+  for (const c of [...btcArr].sort((a, b) => a.time - b.time)) {
+    const x = em.get(c.time);
+    if (x) {
+      b.push(c);
+      e.push(x);
+    }
+  }
+  return { btc: b, eth: e };
+}
+
+function mergeCandlesByTime(existing, incoming) {
+  const map = new Map();
+  for (const c of existing) {
+    map.set(c.time, c);
+  }
+  for (const c of incoming) {
+    map.set(c.time, c);
+  }
+  return [...map.values()].sort((a, b) => a.time - b.time);
+}
+
+function mergeSignalMarkers(existing, incoming) {
+  const map = new Map();
+  for (const m of existing) map.set(`${m.time}:${m.text}`, m);
+  for (const m of incoming) map.set(`${m.time}:${m.text}`, m);
+  return [...map.values()].sort((a, b) => a.time - b.time);
+}
+
+function stickChartsToRightEdge() {
+  try {
+    if (priceChartInstance?.timeScale?.().scrollToRealTime) {
+      priceChartInstance.timeScale().scrollToRealTime();
+    } else if (priceChartInstance?.timeScale?.().scrollToPosition) {
+      priceChartInstance.timeScale().scrollToPosition(0, false);
+    }
+  } catch (_) { /* noop */ }
+
+  try {
+    if (ethPriceChartInstance?.timeScale?.().scrollToRealTime) {
+      ethPriceChartInstance.timeScale().scrollToRealTime();
+    } else if (ethPriceChartInstance?.timeScale?.().scrollToPosition) {
+      ethPriceChartInstance.timeScale().scrollToPosition(0, false);
+    }
+  } catch (_) { /* noop */ }
+}
+
+async function fetchKlinesViaProxy(symbol, interval, limit, endTimeMs) {
+  let url = `/api/markets/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
+  if (endTimeMs != null) url += `&endTime=${endTimeMs}`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const j = await res.json();
+  if (!j || !Array.isArray(j.candles)) return null;
+  return j.candles;
+}
+
+function mapProxyCandles(candles) {
+  return candles.map((c) => ({
+    time: c.time,
+    open: parseFloat(c.open),
+    high: parseFloat(c.high),
+    low: parseFloat(c.low),
+    close: parseFloat(c.close),
+  }));
+}
+
+// ── BTC + ETH live price charts (stacked, synced time range) ──
+async function loadPriceChart() {
+  if (!priceInterval) return;
+  const sessionId = ++priceHistorySessionId;
+
+  const btcContainer = document.getElementById('priceChart');
+  const ethContainer = document.getElementById('ethPriceChart');
+  if (!btcContainer || !ethContainer) return;
+  const shouldCreateCharts = !priceChartInstance || !ethPriceChartInstance;
+  if (shouldCreateCharts) {
+    const w = btcContainer.clientWidth;
+    const h = 240;
+    const chartOpts = {
+      width: w,
+      height: h,
+      layout: { background: { color: '#1e1e1e' }, textColor: '#9aa0a6' },
+      grid: { vertLines: { color: '#3c3c3c' }, horzLines: { color: '#3c3c3c' } },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+      rightPriceScale: { borderColor: '#3c3c3c' },
+      timeScale: {
+        borderColor: '#3c3c3c',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 6,
+        fixRightEdge: true,
+        lockVisibleTimeRangeOnResize: true,
+      },
+    };
+
+    priceChartInstance = LightweightCharts.createChart(btcContainer, chartOpts);
+    ethPriceChartInstance = LightweightCharts.createChart(ethContainer, chartOpts);
+
+    const candleStyle = {
+      upColor: '#34a853',
+      downColor: '#ea4335',
+      borderUpColor: '#34a853',
+      borderDownColor: '#ea4335',
+      wickUpColor: '#34a853',
+      wickDownColor: '#ea4335',
+    };
+    candleSeriesRef = priceChartInstance.addCandlestickSeries(candleStyle);
+    ethCandleSeriesRef = ethPriceChartInstance.addCandlestickSeries(candleStyle);
+
+    priceChartsSyncing = false;
+    priceChartInstance.timeScale().subscribeVisibleTimeRangeChange((range) => {
+      if (priceChartsSyncing || !range || !ethPriceChartInstance) return;
+      priceChartsSyncing = true;
+      try {
+        ethPriceChartInstance.timeScale().setVisibleRange(range);
+      } catch (_) { /* noop */ }
+      priceChartsSyncing = false;
+    });
+    ethPriceChartInstance.timeScale().subscribeVisibleTimeRangeChange((range) => {
+      if (priceChartsSyncing || !range || !priceChartInstance) return;
+      priceChartsSyncing = true;
+      try {
+        priceChartInstance.timeScale().setVisibleRange(range);
+      } catch (_) { /* noop */ }
+      priceChartsSyncing = false;
+    });
+
+    // Disabled by request: no lazy-loading older candles on zoom-out/scroll.
+    priceChartScrollUnsubscribe = null;
+
+    if (priceChartResizeObserver) priceChartResizeObserver.disconnect();
+    const wrap = document.getElementById('priceChartsWrap');
+    priceChartResizeObserver = new ResizeObserver(() => {
+      const width = btcContainer.clientWidth;
+      if (priceChartInstance) priceChartInstance.applyOptions({ width });
+      if (ethPriceChartInstance) ethPriceChartInstance.applyOptions({ width });
+    });
+    priceChartResizeObserver.observe(wrap || btcContainer);
+  }
+
+  let btcRaw;
+  let ethRaw;
+  try {
+    [btcRaw, ethRaw] = await Promise.all([
+      fetchKlinesViaProxy('BTCUSDT', priceInterval, 500),
+      fetchKlinesViaProxy('ETHUSDT', priceInterval, 500),
+    ]);
+  } catch (e) {
+    console.error('[PriceChart] klines proxy fetch failed', e);
+    return;
+  }
+  if (!btcRaw?.length || !ethRaw?.length) return;
+
+  const mappedB = mapProxyCandles(btcRaw);
+  const mappedE = mapProxyCandles(ethRaw);
+  const aligned = alignCandleBatches(mappedB, mappedE);
+  if (aligned.btc.length === 0) return;
+
+  const newestCandleTime = aligned.btc[aligned.btc.length - 1].time;
+  const latestBtc = aligned.btc;
+  const latestEth = aligned.eth;
+  if (allCandles.length > 0 && ethAllCandles.length > 0) {
+    allCandles = mergeCandlesByTime(allCandles, latestBtc);
+    ethAllCandles = mergeCandlesByTime(ethAllCandles, latestEth);
+  } else {
+    allCandles = latestBtc;
+    ethAllCandles = latestEth;
+  }
+  if (allCandles.length === 0 || ethAllCandles.length === 0) return;
+  oldestCandleTime = allCandles[0].time;
+
+  const incomingSignals = await fetchSignalsForRange(priceInterval, oldestCandleTime, newestCandleTime);
+  allSignals = mergeSignalMarkers(allSignals, incomingSignals);
+
+  applyChartData();
+  applyEthChartData();
+  stickChartsToRightEdge();
+
+  // Preload older data in background up to ~3 months without changing viewport.
+  if (!isHistoryPreloading) {
+    const targetStartSec = Math.floor(Date.now() / 1000) - PRICE_HISTORY_TARGET_SECONDS;
+    if (oldestCandleTime > targetStartSec) {
+      void preloadPriceHistory(sessionId, targetStartSec);
+    }
   }
 }
 
-// ── BTC Live Price chart ──
-async function loadPriceChart() {
-  if (!priceInterval) return;
-
-  const container = document.getElementById('priceChart');
-  if (priceChartInstance) { priceChartInstance.remove(); priceChartInstance = null; }
-
-  priceChartInstance = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: 260,
-    layout: { background: { color: '#1e1e1e' }, textColor: '#9aa0a6' },
-    grid: { vertLines: { color: '#3c3c3c' }, horzLines: { color: '#3c3c3c' } },
-    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-    rightPriceScale: { borderColor: '#3c3c3c' },
-    timeScale: { borderColor: '#3c3c3c', timeVisible: true, secondsVisible: false },
-  });
-
-  candleSeriesRef = priceChartInstance.addCandlestickSeries({
-    upColor: '#34a853', downColor: '#ea4335',
-    borderUpColor: '#34a853', borderDownColor: '#ea4335',
-    wickUpColor: '#34a853', wickDownColor: '#ea4335',
-  });
-
-  // Fetch 500 candles from Binance directly (public API, no auth)
-  let raw;
-  try {
-    const res = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${priceInterval}&limit=500`,
-    );
-    raw = await res.json();
-  } catch (e) {
-    console.error('[PriceChart] Binance initial fetch failed', e);
-    return;
+async function preloadPriceHistory(sessionId, targetStartSec) {
+  if (isHistoryPreloading) return;
+  isHistoryPreloading = true;
+  const loadingEl = document.getElementById('priceChartLoading');
+  if (loadingEl) {
+    loadingEl.textContent = 'Loading 3-month history...';
+    loadingEl.style.display = 'inline';
   }
-  if (!Array.isArray(raw) || raw.length === 0) return;
 
-  allCandles = raw.map(r => ({
-    time: Math.floor(r[0] / 1000),
-    open: +r[1], high: +r[2], low: +r[3], close: +r[4],
-  }));
-  oldestCandleTime = allCandles[0].time;
-  const newestCandleTime = allCandles[allCandles.length - 1].time;
+  try {
+    let guard = 0;
+    while (
+      guard < 120 &&
+      sessionId === priceHistorySessionId &&
+      oldestCandleTime != null &&
+      oldestCandleTime > targetStartSec
+    ) {
+      guard += 1;
+      const endTime = oldestCandleTime * 1000 - 1;
+      const [btcRaw, ethRaw] = await Promise.all([
+        fetchKlinesViaProxy('BTCUSDT', priceInterval, 500, endTime),
+        fetchKlinesViaProxy('ETHUSDT', priceInterval, 500, endTime),
+      ]);
 
-  // Fetch signals for the initial range from backend
-  allSignals = await fetchSignalsForRange(priceInterval, oldestCandleTime, newestCandleTime);
+      if (!btcRaw?.length || !ethRaw?.length) break;
+      const newBtc = mapProxyCandles(btcRaw);
+      const newEth = mapProxyCandles(ethRaw);
+      const existingTimes = new Set(allCandles.map((c) => c.time));
+      const dedupedBtc = newBtc.filter((c) => !existingTimes.has(c.time));
+      const existingEthTimes = new Set(ethAllCandles.map((c) => c.time));
+      const dedupedEth = newEth.filter((c) => !existingEthTimes.has(c.time));
+      if (!dedupedBtc.length || !dedupedEth.length) break;
 
-  applyChartData();
-  priceChartInstance.timeScale().fitContent();
+      const { btc: ab, eth: ae } = alignCandleBatches(dedupedBtc, dedupedEth);
+      if (!ab.length || !ae.length) break;
 
-  // Infinite scroll: fetch older candles when user scrolls near the left edge
-  const scrollHandler = async (range) => {
-    if (!range || range.from > 10 || isFetchingHistory) return;
-    await fetchOlderCandles();
-  };
-  priceChartInstance.timeScale().subscribeVisibleLogicalRangeChange(scrollHandler);
-  priceChartScrollUnsubscribe = () => {
-    if (priceChartInstance) {
-      priceChartInstance.timeScale().unsubscribeVisibleLogicalRangeChange(scrollHandler);
+      allCandles = [...ab, ...allCandles];
+      ethAllCandles = [...ae, ...ethAllCandles];
+      oldestCandleTime = allCandles[0].time;
+
+      const batchSignals = await fetchSignalsForRange(
+        priceInterval,
+        ab[0].time,
+        ab[ab.length - 1].time,
+      );
+      allSignals = mergeSignalMarkers(allSignals, batchSignals);
     }
-  };
 
-  if (priceChartResizeObserver) priceChartResizeObserver.disconnect();
-  priceChartResizeObserver = new ResizeObserver(() => {
-    if (priceChartInstance) priceChartInstance.applyOptions({ width: container.clientWidth });
-  });
-  priceChartResizeObserver.observe(container);
+    if (sessionId === priceHistorySessionId) {
+      applyChartData();
+      applyEthChartData();
+      stickChartsToRightEdge();
+    }
+  } catch (e) {
+    console.error('[PriceChart] preloadPriceHistory failed', e);
+  } finally {
+    if (sessionId === priceHistorySessionId && loadingEl) {
+      loadingEl.textContent = 'Loading history...';
+      loadingEl.style.display = 'none';
+    }
+    isHistoryPreloading = false;
+  }
 }
 
 async function fetchOlderCandles() {
@@ -891,45 +1109,55 @@ async function fetchOlderCandles() {
   document.getElementById('priceChartLoading').style.display = 'inline';
   try {
     const endTime = oldestCandleTime * 1000 - 1;
-    const res = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${priceInterval}&limit=500&endTime=${endTime}`,
-    );
-    const raw = await res.json();
+    const [btcRaw, ethRaw] = await Promise.all([
+      fetchKlinesViaProxy('BTCUSDT', priceInterval, 500, endTime),
+      fetchKlinesViaProxy('ETHUSDT', priceInterval, 500, endTime),
+    ]);
 
-    if (!Array.isArray(raw) || raw.length < 2) {
-      // Reached the end of Binance history — stop listening
-      if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
+    if (!btcRaw?.length || !ethRaw?.length || btcRaw.length < 2 || ethRaw.length < 2) {
+      if (priceChartScrollUnsubscribe) {
+        priceChartScrollUnsubscribe();
+        priceChartScrollUnsubscribe = null;
+      }
       return;
     }
 
-    const newBatch = raw.map(r => ({
-      time: Math.floor(r[0] / 1000),
-      open: +r[1], high: +r[2], low: +r[3], close: +r[4],
-    }));
-
-    // Dedup: Binance endTime is exclusive but guard anyway
-    const existingTimes = new Set(allCandles.map(c => c.time));
-    const deduped = newBatch.filter(c => !existingTimes.has(c.time));
-    if (deduped.length === 0) {
-      if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
+    const newBtc = mapProxyCandles(btcRaw);
+    const newEth = mapProxyCandles(ethRaw);
+    const existingTimes = new Set(allCandles.map((c) => c.time));
+    const dedupedBtc = newBtc.filter((c) => !existingTimes.has(c.time));
+    const existingEthTimes = new Set(ethAllCandles.map((c) => c.time));
+    const dedupedEth = newEth.filter((c) => !existingEthTimes.has(c.time));
+    if (dedupedBtc.length === 0 || dedupedEth.length === 0) {
+      if (priceChartScrollUnsubscribe) {
+        priceChartScrollUnsubscribe();
+        priceChartScrollUnsubscribe = null;
+      }
       return;
     }
 
-    const batchOldest = deduped[0].time;
-    const batchNewest = deduped[deduped.length - 1].time;
+    const { btc: ab, eth: ae } = alignCandleBatches(dedupedBtc, dedupedEth);
+    if (ab.length === 0 || ae.length === 0) {
+      if (priceChartScrollUnsubscribe) {
+        priceChartScrollUnsubscribe();
+        priceChartScrollUnsubscribe = null;
+      }
+      return;
+    }
 
-    // Fetch signals for this batch from backend (silent on error — show candles without markers)
+    const batchOldest = ab[0].time;
+    const batchNewest = ab[ab.length - 1].time;
     const batchSignals = await fetchSignalsForRange(priceInterval, batchOldest, batchNewest);
 
-    // Bail if interval changed while we were fetching
     if (priceInterval !== capturedInterval) return;
 
-    // Prepend candles and signals, re-render
-    allCandles = [...deduped, ...allCandles];
+    allCandles = [...ab, ...allCandles];
+    ethAllCandles = [...ae, ...ethAllCandles];
     allSignals = [...batchSignals, ...allSignals].sort((a, b) => a.time - b.time);
     oldestCandleTime = allCandles[0].time;
 
     applyChartData();
+    applyEthChartData();
   } catch (e) {
     console.error('[PriceChart] fetchOlderCandles failed', e);
   } finally {
@@ -942,11 +1170,15 @@ function setPriceInterval(interval) {
   // Detach scroll listener and reset all chart state before reload
   if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
   if (priceChartResizeObserver) { priceChartResizeObserver.disconnect(); priceChartResizeObserver = null; }
+  if (priceChartInstance) { priceChartInstance.remove(); priceChartInstance = null; }
+  if (ethPriceChartInstance) { ethPriceChartInstance.remove(); ethPriceChartInstance = null; }
   allCandles = [];
+  ethAllCandles = [];
   allSignals = [];
   oldestCandleTime = null;
   isFetchingHistory = false;
   candleSeriesRef = null;
+  ethCandleSeriesRef = null;
 
   priceInterval = interval;
   document.querySelectorAll('#priceIntervalTabs .range-tab').forEach(t => {
@@ -1034,11 +1266,11 @@ async function loadConfig() {
   const intervals = d.intervals || [];
   if (intervals.length > 0 && !priceInterval) priceInterval = intervals[0];
   const tabsContainer = document.getElementById('priceIntervalTabs');
-  if (tabsContainer && intervals.length > 0) {
+  if (tabsContainer && intervals.length > 0 && !tabsContainer.dataset.ready) {
     tabsContainer.innerHTML = intervals.map(iv =>
       `<button class="range-tab${iv === priceInterval ? ' active' : ''}" data-interval="${iv}" onclick="setPriceInterval('${iv}')">${iv}</button>`
     ).join('');
-    void loadPriceChart();
+    tabsContainer.dataset.ready = '1';
   }
 }
 
@@ -1578,9 +1810,9 @@ async function loadMostTargetedInterval() {
 
 
 async function loadAll() {
+  await Promise.all([loadHealth(), loadConfig()]);
+  await loadPriceChart();
   await Promise.all([
-    loadHealth(),
-    loadConfig(),
     loadSignalCount(),
     loadTopWallets(),
     loadLastSignal(),
