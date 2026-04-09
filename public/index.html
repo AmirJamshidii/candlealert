@@ -653,12 +653,10 @@ const grids = {};
 let signalPeriod = 'today';
 let priceInterval = null;
 let priceChartInstance = null;
-let candleSeriesRef = null;           // module-level ref so fetchOlderCandles can reach it
+let candleSeriesRef = null;
 let allCandles = [];                  // full accumulated candle array
 let allSignals = [];                  // full accumulated signal markers array
 let oldestCandleTime = null;          // Unix seconds of oldest loaded candle
-let isFetchingHistory = false;        // dedup guard for scroll loads
-let priceChartScrollUnsubscribe = null; // call to detach the scroll listener
 let priceChartResizeObserver = null;    // track observer so we can disconnect on reload
 let ethPriceChartInstance = null;
 let ethCandleSeriesRef = null;
@@ -667,6 +665,9 @@ let priceChartsSyncing = false;
 let priceHistorySessionId = 0;
 let isHistoryPreloading = false;
 const PRICE_HISTORY_TARGET_SECONDS = 90 * 24 * 60 * 60; // ~3 months
+const KLINES_FETCH_TIMEOUT_MS = 20000;
+const PRELOAD_BATCH_DELAY_MS = 150;
+const PRELOAD_MAX_BATCHES = 80;
 let topWalletsDays = 1;
 let dirBiasData = null;
 let signalSummaryData = null;
@@ -901,11 +902,24 @@ function stickChartsToRightEdge() {
 async function fetchKlinesViaProxy(symbol, interval, limit, endTimeMs) {
   let url = `/api/markets/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`;
   if (endTimeMs != null) url += `&endTime=${endTimeMs}`;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const j = await res.json();
-  if (!j || !Array.isArray(j.candles)) return null;
-  return j.candles;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), KLINES_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const j = await res.json();
+    if (!j || !Array.isArray(j.candles)) return null;
+    return j.candles;
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      console.warn('[PriceChart] klines fetch aborted (timeout)');
+    } else {
+      console.warn('[PriceChart] klines fetch failed', e);
+    }
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function mapProxyCandles(candles) {
@@ -979,9 +993,6 @@ async function loadPriceChart() {
       priceChartsSyncing = false;
     });
 
-    // Disabled by request: no lazy-loading older candles on zoom-out/scroll.
-    priceChartScrollUnsubscribe = null;
-
     if (priceChartResizeObserver) priceChartResizeObserver.disconnect();
     const wrap = document.getElementById('priceChartsWrap');
     priceChartResizeObserver = new ResizeObserver(() => {
@@ -1051,7 +1062,7 @@ async function preloadPriceHistory(sessionId, targetStartSec) {
   try {
     let guard = 0;
     while (
-      guard < 120 &&
+      guard < PRELOAD_MAX_BATCHES &&
       sessionId === priceHistorySessionId &&
       oldestCandleTime != null &&
       oldestCandleTime > targetStartSec
@@ -1079,15 +1090,16 @@ async function preloadPriceHistory(sessionId, targetStartSec) {
       ethAllCandles = [...ae, ...ethAllCandles];
       oldestCandleTime = allCandles[0].time;
 
-      const batchSignals = await fetchSignalsForRange(
-        priceInterval,
-        ab[0].time,
-        ab[ab.length - 1].time,
-      );
-      allSignals = mergeSignalMarkers(allSignals, batchSignals);
+      await new Promise((r) => setTimeout(r, PRELOAD_BATCH_DELAY_MS));
     }
 
-    if (sessionId === priceHistorySessionId) {
+    if (sessionId === priceHistorySessionId && allCandles.length > 0) {
+      const fullSignals = await fetchSignalsForRange(
+        priceInterval,
+        allCandles[0].time,
+        allCandles[allCandles.length - 1].time,
+      );
+      allSignals = mergeSignalMarkers(allSignals, fullSignals);
       applyChartData();
       applyEthChartData();
       stickChartsToRightEdge();
@@ -1103,72 +1115,7 @@ async function preloadPriceHistory(sessionId, targetStartSec) {
   }
 }
 
-async function fetchOlderCandles() {
-  const capturedInterval = priceInterval;
-  isFetchingHistory = true;
-  document.getElementById('priceChartLoading').style.display = 'inline';
-  try {
-    const endTime = oldestCandleTime * 1000 - 1;
-    const [btcRaw, ethRaw] = await Promise.all([
-      fetchKlinesViaProxy('BTCUSDT', priceInterval, 500, endTime),
-      fetchKlinesViaProxy('ETHUSDT', priceInterval, 500, endTime),
-    ]);
-
-    if (!btcRaw?.length || !ethRaw?.length || btcRaw.length < 2 || ethRaw.length < 2) {
-      if (priceChartScrollUnsubscribe) {
-        priceChartScrollUnsubscribe();
-        priceChartScrollUnsubscribe = null;
-      }
-      return;
-    }
-
-    const newBtc = mapProxyCandles(btcRaw);
-    const newEth = mapProxyCandles(ethRaw);
-    const existingTimes = new Set(allCandles.map((c) => c.time));
-    const dedupedBtc = newBtc.filter((c) => !existingTimes.has(c.time));
-    const existingEthTimes = new Set(ethAllCandles.map((c) => c.time));
-    const dedupedEth = newEth.filter((c) => !existingEthTimes.has(c.time));
-    if (dedupedBtc.length === 0 || dedupedEth.length === 0) {
-      if (priceChartScrollUnsubscribe) {
-        priceChartScrollUnsubscribe();
-        priceChartScrollUnsubscribe = null;
-      }
-      return;
-    }
-
-    const { btc: ab, eth: ae } = alignCandleBatches(dedupedBtc, dedupedEth);
-    if (ab.length === 0 || ae.length === 0) {
-      if (priceChartScrollUnsubscribe) {
-        priceChartScrollUnsubscribe();
-        priceChartScrollUnsubscribe = null;
-      }
-      return;
-    }
-
-    const batchOldest = ab[0].time;
-    const batchNewest = ab[ab.length - 1].time;
-    const batchSignals = await fetchSignalsForRange(priceInterval, batchOldest, batchNewest);
-
-    if (priceInterval !== capturedInterval) return;
-
-    allCandles = [...ab, ...allCandles];
-    ethAllCandles = [...ae, ...ethAllCandles];
-    allSignals = [...batchSignals, ...allSignals].sort((a, b) => a.time - b.time);
-    oldestCandleTime = allCandles[0].time;
-
-    applyChartData();
-    applyEthChartData();
-  } catch (e) {
-    console.error('[PriceChart] fetchOlderCandles failed', e);
-  } finally {
-    isFetchingHistory = false;
-    document.getElementById('priceChartLoading').style.display = 'none';
-  }
-}
-
 function setPriceInterval(interval) {
-  // Detach scroll listener and reset all chart state before reload
-  if (priceChartScrollUnsubscribe) { priceChartScrollUnsubscribe(); priceChartScrollUnsubscribe = null; }
   if (priceChartResizeObserver) { priceChartResizeObserver.disconnect(); priceChartResizeObserver = null; }
   if (priceChartInstance) { priceChartInstance.remove(); priceChartInstance = null; }
   if (ethPriceChartInstance) { ethPriceChartInstance.remove(); ethPriceChartInstance = null; }
@@ -1176,7 +1123,6 @@ function setPriceInterval(interval) {
   ethAllCandles = [];
   allSignals = [];
   oldestCandleTime = null;
-  isFetchingHistory = false;
   candleSeriesRef = null;
   ethCandleSeriesRef = null;
 

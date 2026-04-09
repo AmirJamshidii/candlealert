@@ -1,10 +1,18 @@
-import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
+import { isAxiosError } from 'axios';
 import { AppConfig } from '../../config/app.config';
 
 const ALLOWED_SYMBOLS = new Set(['BTCUSDT', 'ETHUSDT']);
 const ALLOWED_INTERVALS = new Set(['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '12h', '1d']);
+const BINANCE_KLINES_TIMEOUT_MS = 15_000;
 
 @Controller('api/markets')
 export class MarketsController {
@@ -43,18 +51,47 @@ export class MarketsController {
       if (Number.isFinite(end)) params.endTime = end;
     }
 
-    const { data } = await firstValueFrom(
-      this.http.get<Array<[number, string, string, string, string]>>(url, { params }),
-    );
+    try {
+      const { data } = await firstValueFrom(
+        this.http.get<unknown>(url, {
+          params,
+          timeout: BINANCE_KLINES_TIMEOUT_MS,
+        }),
+      );
 
-    const candles = data.map((row) => ({
-      time: Math.floor(row[0] / 1000),
-      open: row[1],
-      high: row[2],
-      low: row[3],
-      close: row[4],
-    }));
+      if (!Array.isArray(data)) {
+        throw new BadGatewayException('Binance klines response was not an array');
+      }
 
-    return { symbol: sym, interval: iv, candles };
+      const candles = data.map((row: unknown, index: number) => {
+        if (!Array.isArray(row) || row.length < 5) {
+          throw new BadGatewayException(`Invalid kline row at index ${index} from Binance`);
+        }
+        return {
+          time: Math.floor(Number(row[0]) / 1000),
+          open: String(row[1]),
+          high: String(row[2]),
+          low: String(row[3]),
+          close: String(row[4]),
+        };
+      });
+
+      return { symbol: sym, interval: iv, candles };
+    } catch (err: unknown) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) {
+        throw err;
+      }
+      let message = 'Binance klines request failed';
+      if (isAxiosError(err)) {
+        const body = err.response?.data as { msg?: string } | undefined;
+        message = body?.msg ?? err.message ?? message;
+        if (err.code === 'ECONNABORTED') {
+          message = `Binance klines timed out after ${BINANCE_KLINES_TIMEOUT_MS}ms`;
+        }
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      throw new BadGatewayException(message);
+    }
   }
 }
