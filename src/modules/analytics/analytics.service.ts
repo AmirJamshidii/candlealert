@@ -285,7 +285,8 @@ export class AnalyticsService {
           volume: candle.volume,
           closeTime: candle.closeTime,
           bodySize: Math.abs(candle.close - candle.open),
-          wickRatio: range > 0 ? Math.abs(candle.close - candle.open) / range : 0,
+          wickRatio:
+            range > 0 ? Math.abs(candle.close - candle.open) / range : 0,
         };
       }
     }

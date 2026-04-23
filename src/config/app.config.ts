@@ -74,10 +74,15 @@ export class AppConfig {
   }
 
   get systemPrompt(): string {
-    return this.configService.get<string>('SYSTEM_PROMPT') ?? DEFAULT_SYSTEM_PROMPT;
+    return (
+      this.configService.get<string>('SYSTEM_PROMPT') ?? DEFAULT_SYSTEM_PROMPT
+    );
   }
 
   get telegramPrompt(): string {
-    return this.configService.get<string>('TELEGRAM_PROMPT') ?? DEFAULT_TELEGRAM_PROMPT;
+    return (
+      this.configService.get<string>('TELEGRAM_PROMPT') ??
+      DEFAULT_TELEGRAM_PROMPT
+    );
   }
 }

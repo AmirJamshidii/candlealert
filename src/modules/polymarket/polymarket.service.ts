@@ -241,7 +241,9 @@ export class PolymarketService {
         conditionId,
         signalKey,
         closeTime,
-      ).catch((err) => this.errorLogService.log(err, { module: 'suspect-scoring' }));
+      ).catch((err) =>
+        this.errorLogService.log(err, { module: 'suspect-scoring' }),
+      );
 
       return top.map((h) => ({
         walletAddress: h.proxyWallet,
@@ -268,35 +270,36 @@ export class PolymarketService {
     const results = await Promise.all(
       holders.map(async (h) => {
         // Run 3 API calls in parallel per wallet
-        const [profileResult, positionsResult, activityResult] = await Promise.all([
-          firstValueFrom(
-            this.httpService.get<PolymarketPublicProfile>(profileUrl, {
-              params: { address: h.walletAddress },
-              timeout: 10_000,
+        const [profileResult, positionsResult, activityResult] =
+          await Promise.all([
+            firstValueFrom(
+              this.httpService.get<PolymarketPublicProfile>(profileUrl, {
+                params: { address: h.walletAddress },
+                timeout: 10_000,
+              }),
+            ).catch((err) => {
+              this.errorLogService.log(err, { module: 'suspect-scoring' });
+              return null;
             }),
-          ).catch((err) => {
-            this.errorLogService.log(err, { module: 'suspect-scoring' });
-            return null;
-          }),
-          firstValueFrom(
-            this.httpService.get<PolymarketUserPosition[]>(positionsUrl, {
-              params: { user: h.walletAddress, limit: 500 },
-              timeout: 15_000,
+            firstValueFrom(
+              this.httpService.get<PolymarketUserPosition[]>(positionsUrl, {
+                params: { user: h.walletAddress, limit: 500 },
+                timeout: 15_000,
+              }),
+            ).catch((err) => {
+              this.errorLogService.log(err, { module: 'suspect-scoring' });
+              return null;
             }),
-          ).catch((err) => {
-            this.errorLogService.log(err, { module: 'suspect-scoring' });
-            return null;
-          }),
-          firstValueFrom(
-            this.httpService.get<unknown[]>(activityUrl, {
-              params: { user: h.walletAddress, side: 'SELL', limit: 1 },
-              timeout: 10_000,
+            firstValueFrom(
+              this.httpService.get<unknown[]>(activityUrl, {
+                params: { user: h.walletAddress, side: 'SELL', limit: 1 },
+                timeout: 10_000,
+              }),
+            ).catch((err) => {
+              this.errorLogService.log(err, { module: 'suspect-scoring' });
+              return null;
             }),
-          ).catch((err) => {
-            this.errorLogService.log(err, { module: 'suspect-scoring' });
-            return null;
-          }),
-        ]);
+          ]);
 
         // --- Criterion 1: new wallet (createdAt within 5 days of signal closeTime) ---
         const createdAtStr = profileResult?.data?.createdAt ?? null;
@@ -305,19 +308,27 @@ export class PolymarketService {
         // --- Criterion 2: buy-only (zero SELL trades) ---
         const criterionBuyOnly =
           activityResult !== null
-            ? evalBuyOnly(Array.isArray(activityResult.data) ? activityResult.data : [])
+            ? evalBuyOnly(
+                Array.isArray(activityResult.data) ? activityResult.data : [],
+              )
             : null;
 
         // --- Criteria 3 & 4: find position for this signal's market ---
         let criterionPositionValue: boolean | null = null;
         let criterionConviction: boolean | null = null;
         if (positionsResult !== null) {
-          const positions: PolymarketUserPosition[] = Array.isArray(positionsResult.data)
+          const positions: PolymarketUserPosition[] = Array.isArray(
+            positionsResult.data,
+          )
             ? positionsResult.data
             : [];
-          const marketPosition = positions.find((p) => p.conditionId === conditionId);
+          const marketPosition = positions.find(
+            (p) => p.conditionId === conditionId,
+          );
           if (marketPosition) {
-            criterionPositionValue = evalPositionValue(marketPosition.currentValue);
+            criterionPositionValue = evalPositionValue(
+              marketPosition.currentValue,
+            );
             criterionConviction = evalConviction(marketPosition.avgPrice);
           }
         }
@@ -332,12 +343,23 @@ export class PolymarketService {
 
         // --- Store wallet profile (reuse positions response) ---
         if (positionsResult !== null) {
-          const positions: PolymarketUserPosition[] = Array.isArray(positionsResult.data)
+          const positions: PolymarketUserPosition[] = Array.isArray(
+            positionsResult.data,
+          )
             ? positionsResult.data
             : [];
-          const totalCurrentValue = positions.reduce((s, p) => s + (p.currentValue ?? 0), 0);
-          const totalRealizedPnl = positions.reduce((s, p) => s + (p.realizedPnl ?? 0), 0);
-          const totalCashPnl = positions.reduce((s, p) => s + (p.cashPnl ?? 0), 0);
+          const totalCurrentValue = positions.reduce(
+            (s, p) => s + (p.currentValue ?? 0),
+            0,
+          );
+          const totalRealizedPnl = positions.reduce(
+            (s, p) => s + (p.realizedPnl ?? 0),
+            0,
+          );
+          const totalCashPnl = positions.reduce(
+            (s, p) => s + (p.cashPnl ?? 0),
+            0,
+          );
           const btcUpdownPositions = positions.filter((p) =>
             p.eventSlug?.startsWith('btc-updown'),
           ).length;
@@ -352,16 +374,18 @@ export class PolymarketService {
             .slice(0, 5);
 
           await this.walletProfileRepo
-            .upsertMany([{
-              walletAddress: h.walletAddress,
-              displayName: h.name,
-              totalPositions: positions.length,
-              totalCurrentValue: String(totalCurrentValue),
-              totalRealizedPnl: String(totalRealizedPnl),
-              totalCashPnl: String(totalCashPnl),
-              btcUpdownPositions,
-              favoriteCategories,
-            }])
+            .upsertMany([
+              {
+                walletAddress: h.walletAddress,
+                displayName: h.name,
+                totalPositions: positions.length,
+                totalCurrentValue: String(totalCurrentValue),
+                totalRealizedPnl: String(totalRealizedPnl),
+                totalCashPnl: String(totalCashPnl),
+                btcUpdownPositions,
+                favoriteCategories,
+              },
+            ])
             .catch((err) =>
               this.errorLogService.log(err, { module: 'polymarket-profiles' }),
             );
@@ -382,9 +406,13 @@ export class PolymarketService {
     // Write all scores in one batch (partial nulls included — never skip)
     await this.winnerRepo
       .updateSuspectScores(results)
-      .catch((err) => this.errorLogService.log(err, { module: 'suspect-scoring' }));
+      .catch((err) =>
+        this.errorLogService.log(err, { module: 'suspect-scoring' }),
+      );
 
-    this.logger.log(`Suspect scores written for ${results.length} wallets on signal ${signalKey}`);
+    this.logger.log(
+      `Suspect scores written for ${results.length} wallets on signal ${signalKey}`,
+    );
   }
 
   private async getTopPositionsByPnl(

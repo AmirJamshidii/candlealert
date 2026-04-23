@@ -229,7 +229,8 @@ export class AnalyticsController {
     name: 'since',
     required: false,
     type: Number,
-    description: 'Candle open time lower bound (Unix seconds). When both since and until are provided, returns signals only (candles: []).',
+    description:
+      'Candle open time lower bound (Unix seconds). When both since and until are provided, returns signals only (candles: []).',
   })
   @ApiQuery({
     name: 'until',
@@ -263,8 +264,12 @@ export class AnalyticsController {
     return this.analyticsService.getBtcCandles(
       interval ?? '5m',
       limit ? parseInt(limit, 10) : 200,
-      since !== undefined && Number.isFinite(+since) ? parseInt(since, 10) : undefined,
-      until !== undefined && Number.isFinite(+until) ? parseInt(until, 10) : undefined,
+      since !== undefined && Number.isFinite(+since)
+        ? parseInt(since, 10)
+        : undefined,
+      until !== undefined && Number.isFinite(+until)
+        ? parseInt(until, 10)
+        : undefined,
     );
   }
 

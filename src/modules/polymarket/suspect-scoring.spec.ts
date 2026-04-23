@@ -45,7 +45,9 @@ describe('evalNewWallet', () => {
 
   it('passes when wallet created 1 day before closeTime', () => {
     const closeTime = 1_000_000_000_000;
-    const createdAt = new Date(closeTime - 1 * 24 * 60 * 60 * 1000).toISOString();
+    const createdAt = new Date(
+      closeTime - 1 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     expect(evalNewWallet(createdAt, closeTime)).toBe(true);
   });
 
@@ -57,7 +59,9 @@ describe('evalNewWallet', () => {
 
   it('fails when wallet created 6 days before closeTime', () => {
     const closeTime = 1_000_000_000_000;
-    const createdAt = new Date(closeTime - 6 * 24 * 60 * 60 * 1000).toISOString();
+    const createdAt = new Date(
+      closeTime - 6 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     expect(evalNewWallet(createdAt, closeTime)).toBe(false);
   });
 

@@ -183,10 +183,26 @@ export class PolymarketWinnerRepository {
       btcRatio: parseFloat(r.btcRatio ?? '0'),
       winRate: parseFloat(r.winRate ?? '0'),
       suspectScore: parseFloat(r.suspectScore ?? '0'),
-      criterionNewWallet: r.criterionNewWallet === null ? null : r.criterionNewWallet === 'true' || (r.criterionNewWallet as unknown) === true,
-      criterionBuyOnly: r.criterionBuyOnly === null ? null : r.criterionBuyOnly === 'true' || (r.criterionBuyOnly as unknown) === true,
-      criterionPositionValue: r.criterionPositionValue === null ? null : r.criterionPositionValue === 'true' || (r.criterionPositionValue as unknown) === true,
-      criterionConviction: r.criterionConviction === null ? null : r.criterionConviction === 'true' || (r.criterionConviction as unknown) === true,
+      criterionNewWallet:
+        r.criterionNewWallet === null
+          ? null
+          : r.criterionNewWallet === 'true' ||
+            (r.criterionNewWallet as unknown) === true,
+      criterionBuyOnly:
+        r.criterionBuyOnly === null
+          ? null
+          : r.criterionBuyOnly === 'true' ||
+            (r.criterionBuyOnly as unknown) === true,
+      criterionPositionValue:
+        r.criterionPositionValue === null
+          ? null
+          : r.criterionPositionValue === 'true' ||
+            (r.criterionPositionValue as unknown) === true,
+      criterionConviction:
+        r.criterionConviction === null
+          ? null
+          : r.criterionConviction === 'true' ||
+            (r.criterionConviction as unknown) === true,
     }));
   }
 
