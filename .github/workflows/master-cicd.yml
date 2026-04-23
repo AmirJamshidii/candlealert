@@ -43,6 +43,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 30m
           script: |
             cd /var/www/candlealert
             git pull origin master
