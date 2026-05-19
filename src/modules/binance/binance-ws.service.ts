@@ -19,8 +19,13 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BinanceWsService.name);
   private readonly sockets = new Map<string, WebSocket>();
   private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
+  private readonly heartbeatTimers = new Map<string, NodeJS.Timeout>();
   private readonly BASE_DELAY = 1_000;
   private readonly MAX_DELAY = 60_000;
+  // Binance sends kline updates at least every ~2s. If we get no message for
+  // STALE_TIMEOUT_MS, the connection is considered zombie and is force-closed
+  // to trigger a clean reconnect.
+  private readonly STALE_TIMEOUT_MS = 30_000;
   private destroyed = false;
 
   constructor(
@@ -32,6 +37,30 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     for (const interval of this.appConfig.intervals) {
       this.connect(interval, 0);
+    }
+  }
+
+  private armHeartbeat(interval: string, ws: WebSocket): void {
+    const existing = this.heartbeatTimers.get(interval);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.logger.warn(
+        `Binance WS [${interval}] stale (no message in ${this.STALE_TIMEOUT_MS}ms), forcing reconnect`,
+      );
+      try {
+        ws.terminate();
+      } catch (err) {
+        this.errorLogService.log(err, { module: 'binance-ws' });
+      }
+    }, this.STALE_TIMEOUT_MS);
+    this.heartbeatTimers.set(interval, timer);
+  }
+
+  private clearHeartbeat(interval: string): void {
+    const t = this.heartbeatTimers.get(interval);
+    if (t) {
+      clearTimeout(t);
+      this.heartbeatTimers.delete(interval);
     }
   }
 
@@ -47,9 +76,11 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
 
     ws.on('open', () => {
       this.logger.log(`Binance WS connected [${interval}]`);
+      this.armHeartbeat(interval, ws);
     });
 
     ws.on('message', (raw: Buffer) => {
+      this.armHeartbeat(interval, ws);
       try {
         const msg: IBinanceKlineWsMessage = JSON.parse(raw.toString());
         if (msg.e !== 'kline') return;
@@ -75,10 +106,18 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
       }
     });
 
-    ws.on('ping', (data) => ws.pong(data));
+    ws.on('ping', (data) => {
+      this.armHeartbeat(interval, ws);
+      ws.pong(data);
+    });
+
+    ws.on('pong', () => {
+      this.armHeartbeat(interval, ws);
+    });
 
     ws.on('close', (code) => {
       this.sockets.delete(interval);
+      this.clearHeartbeat(interval);
       if (this.destroyed || code === 1000) return;
       const delay = Math.min(
         this.BASE_DELAY * Math.pow(2, attempt),
@@ -104,6 +143,7 @@ export class BinanceWsService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     this.destroyed = true;
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    for (const timer of this.heartbeatTimers.values()) clearTimeout(timer);
     for (const [interval, ws] of this.sockets.entries()) {
       this.logger.log(`Closing Binance WS [${interval}]`);
       ws.close(1000);
