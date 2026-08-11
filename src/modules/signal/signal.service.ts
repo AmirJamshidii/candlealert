@@ -19,11 +19,18 @@ export class SignalService {
     private readonly appConfig: AppConfig,
   ) {}
 
+  private readonly TWAP_WINDOW_MS = 30_000;
+
   @OnEvent('kline.tick')
   handleKlineTick(event: KlineTickEvent): void {
     const { interval, candle } = event;
     const now = Date.now();
     const timeRemaining = candle.closeTime - now;
+
+    // Accumulate price ticks for TWAP calculation
+    if (!candle.isClosed) {
+      this.signalStateService.addTick(interval, candle.openTime, candle.close);
+    }
 
     // Snapshot at T-Ns if not done yet for this candle
     if (
@@ -31,23 +38,30 @@ export class SignalService {
       timeRemaining > 0 &&
       !this.signalStateService.hasSnapshot(interval, candle.openTime)
     ) {
-      const isGreen = candle.close > candle.open;
-      this.signalStateService.snapshot(
-        interval,
-        candle.openTime,
-        isGreen,
-        candle.close,
-      );
+      const twap =
+        this.signalStateService.getTwap(
+          interval,
+          candle.openTime,
+          this.TWAP_WINDOW_MS,
+        ) ?? candle.close;
+      const isGreen = twap > candle.open;
+      this.signalStateService.snapshot(interval, candle.openTime, isGreen, twap);
       this.logger.debug(
-        `[${interval}] T-10s snapshot: candle ${isGreen ? 'GREEN' : 'RED'} at ${candle.close}`,
+        `[${interval}] T-10s snapshot: candle ${isGreen ? 'GREEN' : 'RED'} (TWAP-30s=${twap.toFixed(2)}, open=${candle.open})`,
       );
     }
 
     // On candle close: check for reversal
     if (candle.isClosed) {
       const snapshot = this.signalStateService.get(interval, candle.openTime);
-      const isCandleRed = candle.close < candle.open;
-      const isCandleGreen = candle.close > candle.open;
+      const twapAtClose =
+        this.signalStateService.getTwap(
+          interval,
+          candle.openTime,
+          this.TWAP_WINDOW_MS,
+        ) ?? candle.close;
+      const isCandleRed = twapAtClose < candle.open;
+      const isCandleGreen = twapAtClose > candle.open;
 
       const isGreenToRed = snapshot?.wasGreen && isCandleRed;
       const isRedToGreen = snapshot && !snapshot.wasGreen && isCandleGreen;
@@ -63,8 +77,8 @@ export class SignalService {
           isTestMode && !isReversal
             ? `[${interval}] TEST MODE: forcing signal. Key: ${signalKey}`
             : isGreenToRed
-              ? `[${interval}] REVERSAL detected! Was green at ${snapshot.closeAtSnapshot}, closed red at ${candle.close}. Key: ${signalKey}`
-              : `[${interval}] REVERSAL detected! Was red at ${snapshot.closeAtSnapshot}, closed green at ${candle.close}. Key: ${signalKey}`,
+              ? `[${interval}] REVERSAL detected! TWAP was ${snapshot.closeAtSnapshot.toFixed(2)} (green), now ${twapAtClose.toFixed(2)} (red). Key: ${signalKey}`
+              : `[${interval}] REVERSAL detected! TWAP was ${snapshot.closeAtSnapshot.toFixed(2)} (red), now ${twapAtClose.toFixed(2)} (green). Key: ${signalKey}`,
         );
         const snapshotPrice = snapshot?.closeAtSnapshot ?? null;
         this.eventEmitter.emit(
