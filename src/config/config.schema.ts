@@ -36,6 +36,9 @@ export const configValidationSchema = Joi.object({
   SYSTEM_PROMPT: Joi.string().optional(),
   TELEGRAM_PROMPT: Joi.string().optional(),
 
+  // Ethereum RPC (Chainlink price feed)
+  ETHEREUM_RPC_URL: Joi.string().optional(),
+
   // App
   PORT: Joi.number().default(3000),
   NODE_ENV: Joi.string()

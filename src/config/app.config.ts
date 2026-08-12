@@ -66,6 +66,10 @@ export class AppConfig {
     return this.configService.get<boolean>('SIGNAL_TEST_MODE');
   }
 
+  get ethereumRpcUrl(): string | undefined {
+    return this.configService.get<string>('ETHEREUM_RPC_URL');
+  }
+
   get port(): number {
     return this.configService.get<number>('PORT');
   }
