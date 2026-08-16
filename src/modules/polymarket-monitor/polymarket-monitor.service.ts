@@ -12,9 +12,9 @@ const INTERVAL_MS: Record<string, number> = {
 };
 
 const INTERVAL_LABEL: Record<string, string> = {
-  '5m': '۵ دقیقه‌ای',
-  '15m': '۱۵ دقیقه‌ای',
-  '1h': '۱ ساعته',
+  '5m': '5m',
+  '15m': '15m',
+  '1h': '1h',
 };
 
 const THRESHOLD_60 = 0.60;
@@ -104,8 +104,24 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
 
     session.pollTimer = poll;
 
-    // Also poll immediately
+    // Stop monitoring when the candle opens
+    const msUntilOpen = candleOpenTime - Date.now();
+    const stopTimer = setTimeout(() => {
+      this.stopSession(session, sessionKey, interval, 'candle opened');
+    }, Math.max(0, msUntilOpen));
+    this.scheduleTimers.push(stopTimer);
+
+    // Poll immediately
     void this.poll(interval, candleOpenTime, session, sessionKey);
+  }
+
+  private stopSession(session: MonitorSession, sessionKey: string, interval: string, reason: string): void {
+    if (session.pollTimer) {
+      clearInterval(session.pollTimer);
+      session.pollTimer = null;
+    }
+    this.sessions.delete(sessionKey);
+    this.logger.log(`[${interval}] Monitoring stopped (${reason})`);
   }
 
   private async poll(
@@ -139,12 +155,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
         if (!session.sent70 && price >= THRESHOLD_70) {
           session.sent70 = true;
           await this.sendAlert(interval, candleOpenTime, label, price, 70);
-          // Stop polling
-          if (session.pollTimer) {
-            clearInterval(session.pollTimer);
-            session.pollTimer = null;
-          }
-          this.sessions.delete(sessionKey);
+          this.stopSession(session, sessionKey, interval, '70% threshold reached');
           return;
         }
       }
@@ -220,11 +231,11 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     const outcomeEmoji = outcome === 'YES' ? '📈' : '📉';
 
     const message = [
-      `${emoji} <b>Polymarket Alert — کندل ${INTERVAL_LABEL[interval] ?? interval}</b>`,
+      `${emoji} <b>Polymarket Alert — ${INTERVAL_LABEL[interval] ?? interval} Candle</b>`,
       ``,
-      `${outcomeEmoji} <b>${outcome}</b> به <b>${pct}%</b> رسید (آستانه ${threshold}%)`,
-      `🕐 شروع کندل: <code>${openTimeStr}</code>`,
-      `🔗 <a href="https://polymarket.com/event/btc-updown-${interval}-${Math.floor(candleOpenTime / 1000)}">مشاهده در Polymarket</a>`,
+      `${outcomeEmoji} <b>${outcome}</b> reached <b>${pct}%</b> (threshold ${threshold}%)`,
+      `🕐 Candle opens: <code>${openTimeStr}</code>`,
+      `🔗 <a href="https://polymarket.com/event/btc-updown-${interval}-${Math.floor(candleOpenTime / 1000)}">View on Polymarket</a>`,
     ].join('\n');
 
     await Promise.all(
