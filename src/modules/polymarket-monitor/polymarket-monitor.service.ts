@@ -17,6 +17,14 @@ const INTERVAL_LABEL: Record<string, string> = {
   '1h': '1h',
 };
 
+const ASSETS = ['btc', 'eth'] as const;
+type Asset = (typeof ASSETS)[number];
+
+const ASSET_LABEL: Record<Asset, string> = {
+  btc: 'BTC',
+  eth: 'ETH',
+};
+
 const THRESHOLD_60 = 0.60;
 const THRESHOLD_70 = 0.70;
 const POLL_MS = 10_000;
@@ -53,7 +61,9 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`Unknown interval: ${interval}, skipping monitor`);
         continue;
       }
-      this.scheduleNext(interval);
+      for (const asset of ASSETS) {
+        this.scheduleNext(interval, asset);
+      }
     }
   }
 
@@ -65,7 +75,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private scheduleNext(interval: string): void {
+  private scheduleNext(interval: string, asset: Asset): void {
     if (this.destroyed) return;
 
     const intervalMs = INTERVAL_MS[interval];
@@ -75,44 +85,43 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     const delay = Math.max(0, monitorStartAt - now);
 
     this.logger.log(
-      `[${interval}] Next candle at ${new Date(nextCandleOpen).toISOString()}, monitoring starts in ${Math.round(delay / 1000)}s`,
+      `[${asset.toUpperCase()}/${interval}] Next candle at ${new Date(nextCandleOpen).toISOString()}, monitoring starts in ${Math.round(delay / 1000)}s`,
     );
 
     const t = setTimeout(() => {
-      this.startMonitoring(interval, nextCandleOpen);
-      // Schedule the one after that
-      const t2 = setTimeout(() => this.scheduleNext(interval), intervalMs);
+      this.startMonitoring(interval, asset, nextCandleOpen);
+      const t2 = setTimeout(() => this.scheduleNext(interval, asset), intervalMs);
       this.scheduleTimers.push(t2);
     }, delay);
     this.scheduleTimers.push(t);
   }
 
-  private startMonitoring(interval: string, candleOpenTime: number): void {
+  private startMonitoring(interval: string, asset: Asset, candleOpenTime: number): void {
     if (this.destroyed) return;
 
-    const sessionKey = `${interval}:${candleOpenTime}`;
+    const sessionKey = `${asset}:${interval}:${candleOpenTime}`;
     const session: MonitorSession = { sent60: false, sent70: false, pollTimer: null };
     this.sessions.set(sessionKey, session);
 
     this.logger.log(
-      `[${interval}] Monitoring started for candle opening at ${new Date(candleOpenTime).toISOString()}`,
+      `[${asset.toUpperCase()}/${interval}] Monitoring started for candle at ${new Date(candleOpenTime).toISOString()}`,
     );
 
     const poll = setInterval(() => {
-      void this.poll(interval, candleOpenTime, session, sessionKey);
+      void this.poll(interval, asset, candleOpenTime, session, sessionKey);
     }, POLL_MS);
 
     session.pollTimer = poll;
 
-    // Stop monitoring when the candle opens
+    // Stop when candle opens
     const msUntilOpen = candleOpenTime - Date.now();
     const stopTimer = setTimeout(() => {
-      this.stopSession(session, sessionKey, interval, 'candle opened');
+      this.stopSession(session, sessionKey, `${asset.toUpperCase()}/${interval}`, 'candle opened');
     }, Math.max(0, msUntilOpen));
     this.scheduleTimers.push(stopTimer);
 
     // Poll immediately
-    void this.poll(interval, candleOpenTime, session, sessionKey);
+    void this.poll(interval, asset, candleOpenTime, session, sessionKey);
   }
 
   private stopSession(session: MonitorSession, sessionKey: string, interval: string, reason: string): void {
@@ -126,6 +135,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
 
   private async poll(
     interval: string,
+    asset: Asset,
     candleOpenTime: number,
     session: MonitorSession,
     sessionKey: string,
@@ -133,15 +143,14 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     if (session.sent70) return;
 
     try {
-      const odds = await this.getMarketOdds(interval, candleOpenTime);
+      const odds = await this.getMarketOdds(asset, interval, candleOpenTime);
       if (!odds) return;
 
       const { upPrice, downPrice } = odds;
       this.logger.debug(
-        `[${interval}] Odds — Up(Yes): ${(upPrice * 100).toFixed(1)}% | Down(No): ${(downPrice * 100).toFixed(1)}%`,
+        `[${asset.toUpperCase()}/${interval}] Up(Yes): ${(upPrice * 100).toFixed(1)}% | Down(No): ${(downPrice * 100).toFixed(1)}%`,
       );
 
-      // Check each outcome for thresholds
       const outcomes: Array<{ label: 'YES' | 'NO'; price: number }> = [
         { label: 'YES', price: upPrice },
         { label: 'NO', price: downPrice },
@@ -150,12 +159,12 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
       for (const { label, price } of outcomes) {
         if (!session.sent60 && price >= THRESHOLD_60) {
           session.sent60 = true;
-          await this.sendAlert(interval, candleOpenTime, label, price, 60);
+          await this.sendAlert(asset, interval, candleOpenTime, label, price, 60);
         }
         if (!session.sent70 && price >= THRESHOLD_70) {
           session.sent70 = true;
-          await this.sendAlert(interval, candleOpenTime, label, price, 70);
-          this.stopSession(session, sessionKey, interval, '70% threshold reached');
+          await this.sendAlert(asset, interval, candleOpenTime, label, price, 70);
+          this.stopSession(session, sessionKey, `${asset.toUpperCase()}/${interval}`, '70% threshold reached');
           return;
         }
       }
@@ -164,8 +173,8 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async getMarketOdds(interval: string, candleOpenTime: number): Promise<MarketOdds | null> {
-    const slug = `btc-updown-${interval}-${Math.floor(candleOpenTime / 1000)}`;
+  private async getMarketOdds(asset: Asset, interval: string, candleOpenTime: number): Promise<MarketOdds | null> {
+    const slug = `${asset}-updown-${interval}-${Math.floor(candleOpenTime / 1000)}`;
     const url = `${this.appConfig.polymarketGammaUrl}/events`;
 
     try {
@@ -213,12 +222,13 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
 
       return null;
     } catch (err) {
-      this.logger.warn(`[${interval}] Failed to fetch odds for ${slug}: ${(err as Error).message}`);
+      this.logger.warn(`[${asset.toUpperCase()}/${interval}] Failed to fetch odds for ${slug}: ${(err as Error).message}`);
       return null;
     }
   }
 
   private async sendAlert(
+    asset: Asset,
     interval: string,
     candleOpenTime: number,
     outcome: 'YES' | 'NO',
@@ -229,13 +239,14 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     const pct = (price * 100).toFixed(1);
     const emoji = threshold === 70 ? '🚨' : '⚠️';
     const outcomeEmoji = outcome === 'YES' ? '📈' : '📉';
+    const assetLabel = ASSET_LABEL[asset];
 
     const message = [
-      `${emoji} <b>Polymarket Alert — ${INTERVAL_LABEL[interval] ?? interval} Candle</b>`,
+      `${emoji} <b>Polymarket Alert — ${assetLabel} ${INTERVAL_LABEL[interval] ?? interval} Candle</b>`,
       ``,
       `${outcomeEmoji} <b>${outcome}</b> reached <b>${pct}%</b> (threshold ${threshold}%)`,
       `🕐 Candle opens: <code>${openTimeStr}</code>`,
-      `🔗 <a href="https://polymarket.com/event/btc-updown-${interval}-${Math.floor(candleOpenTime / 1000)}">View on Polymarket</a>`,
+      `🔗 <a href="https://polymarket.com/event/${asset}-updown-${interval}-${Math.floor(candleOpenTime / 1000)}">View on Polymarket</a>`,
     ].join('\n');
 
     await Promise.all(
@@ -245,7 +256,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     );
 
     this.logger.log(
-      `[${interval}] Alert sent: ${outcome} at ${pct}% (threshold ${threshold}%)`,
+      `[${asset.toUpperCase()}/${interval}] Alert sent: ${outcome} at ${pct}% (threshold ${threshold}%)`,
     );
   }
 }
