@@ -151,13 +151,13 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
         `[${asset.toUpperCase()}/${interval}] Up(Yes): ${(upPrice * 100).toFixed(1)}% | Down(No): ${(downPrice * 100).toFixed(1)}%`,
       );
 
-      const outcomes: Array<{ label: 'YES' | 'NO'; price: number }> = [
-        { label: 'YES', price: upPrice },
-        { label: 'NO', price: downPrice },
+      const outcomes: Array<{ label: 'UP' | 'DOWN'; price: number }> = [
+        { label: 'UP', price: upPrice },
+        { label: 'DOWN', price: downPrice },
       ];
 
       for (const { label, price } of outcomes) {
-        if (!session.sent60 && price >= THRESHOLD_60) {
+        if (!session.sent60 && price >= THRESHOLD_60 && !session.sent70) {
           session.sent60 = true;
           await this.sendAlert(asset, interval, candleOpenTime, label, price, 60);
         }
@@ -231,14 +231,14 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     asset: Asset,
     interval: string,
     candleOpenTime: number,
-    outcome: 'YES' | 'NO',
+    outcome: 'UP' | 'DOWN',
     price: number,
     threshold: 60 | 70,
   ): Promise<void> {
     const openTimeStr = new Date(candleOpenTime).toUTCString().replace(' GMT', ' UTC');
     const pct = (price * 100).toFixed(1);
     const emoji = threshold === 70 ? '🚨' : '⚠️';
-    const outcomeEmoji = outcome === 'YES' ? '📈' : '📉';
+    const outcomeEmoji = outcome === 'UP' ? '🟢' : '🔴';
     const assetLabel = ASSET_LABEL[asset];
 
     const message = [
