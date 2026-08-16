@@ -13,6 +13,7 @@ import { AlertModule } from './modules/alert/alert.module';
 import { HealthModule } from './modules/health/health.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { MarketsModule } from './modules/markets/markets.module';
+import { PolymarketMonitorModule } from './modules/polymarket-monitor/polymarket-monitor.module';
 
 @Module({
   imports: [
@@ -26,13 +27,14 @@ import { MarketsModule } from './modules/markets/markets.module';
     DatabaseModule,
     ErrorLogModule,
     TelegramModule,
-    BinanceModule,
-    SignalModule,
+    // BinanceModule, -- disabled: replaced by Polymarket direct monitoring
+    // SignalModule,  -- disabled: replaced by Polymarket direct monitoring
     PolymarketModule,
-    AlertModule,
+    // AlertModule,   -- disabled: replaced by Polymarket direct monitoring
     HealthModule,
     AnalyticsModule,
     MarketsModule,
+    PolymarketMonitorModule,
   ],
 })
 export class AppModule {}
