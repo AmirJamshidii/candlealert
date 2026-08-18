@@ -25,14 +25,12 @@ const ASSET_LABEL: Record<Asset, string> = {
   eth: 'ETH',
 };
 
-const THRESHOLD_60 = 0.60;
-const THRESHOLD_70 = 0.70;
+const THRESHOLD = 0.65;
 const POLL_MS = 10_000;
 const MONITOR_BEFORE_MS = 60_000;
 
 interface MonitorSession {
-  sent60: boolean;
-  sent70: boolean;
+  alerted: boolean;
   pollTimer: NodeJS.Timeout | null;
 }
 
@@ -100,7 +98,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     if (this.destroyed) return;
 
     const sessionKey = `${asset}:${interval}:${candleOpenTime}`;
-    const session: MonitorSession = { sent60: false, sent70: false, pollTimer: null };
+    const session: MonitorSession = { alerted: false, pollTimer: null };
     this.sessions.set(sessionKey, session);
 
     this.logger.log(
@@ -140,7 +138,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     session: MonitorSession,
     sessionKey: string,
   ): Promise<void> {
-    if (session.sent70) return;
+    if (session.alerted) return;
 
     try {
       const odds = await this.getMarketOdds(asset, interval, candleOpenTime);
@@ -148,7 +146,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
 
       const { upPrice, downPrice } = odds;
       this.logger.debug(
-        `[${asset.toUpperCase()}/${interval}] Up(Yes): ${(upPrice * 100).toFixed(1)}% | Down(No): ${(downPrice * 100).toFixed(1)}%`,
+        `[${asset.toUpperCase()}/${interval}] Up: ${(upPrice * 100).toFixed(1)}% | Down: ${(downPrice * 100).toFixed(1)}%`,
       );
 
       const outcomes: Array<{ label: 'UP' | 'DOWN'; price: number }> = [
@@ -157,14 +155,10 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
       ];
 
       for (const { label, price } of outcomes) {
-        if (!session.sent60 && price >= THRESHOLD_60 && !session.sent70) {
-          session.sent60 = true;
-          await this.sendAlert(asset, interval, candleOpenTime, label, price, 60);
-        }
-        if (!session.sent70 && price >= THRESHOLD_70) {
-          session.sent70 = true;
-          await this.sendAlert(asset, interval, candleOpenTime, label, price, 70);
-          this.stopSession(session, sessionKey, `${asset.toUpperCase()}/${interval}`, '70% threshold reached');
+        if (!session.alerted && price >= THRESHOLD) {
+          session.alerted = true;
+          await this.sendAlert(asset, interval, candleOpenTime, label, price);
+          this.stopSession(session, sessionKey, `${asset.toUpperCase()}/${interval}`, '65% threshold reached');
           return;
         }
       }
@@ -233,18 +227,16 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     candleOpenTime: number,
     outcome: 'UP' | 'DOWN',
     price: number,
-    threshold: 60 | 70,
   ): Promise<void> {
     const openTimeStr = new Date(candleOpenTime).toUTCString().replace(' GMT', ' UTC');
     const pct = (price * 100).toFixed(1);
-    const emoji = threshold === 70 ? '🚨' : '⚠️';
     const outcomeEmoji = outcome === 'UP' ? '🟢' : '🔴';
     const assetLabel = ASSET_LABEL[asset];
 
     const message = [
-      `${emoji} <b>Polymarket Alert — ${assetLabel} ${INTERVAL_LABEL[interval] ?? interval} Candle</b>`,
+      `🚨 <b>Polymarket Alert — ${assetLabel} ${INTERVAL_LABEL[interval] ?? interval} Candle</b>`,
       ``,
-      `${outcomeEmoji} <b>${outcome}</b> reached <b>${pct}%</b> (threshold ${threshold}%)`,
+      `${outcomeEmoji} <b>${outcome}</b> reached <b>${pct}%</b> (threshold 65%)`,
       `🕐 Candle opens: <code>${openTimeStr}</code>`,
       `🔗 <a href="https://polymarket.com/event/${asset}-updown-${interval}-${Math.floor(candleOpenTime / 1000)}">View on Polymarket</a>`,
     ].join('\n');
@@ -256,7 +248,7 @@ export class PolymarketMonitorService implements OnModuleInit, OnModuleDestroy {
     );
 
     this.logger.log(
-      `[${asset.toUpperCase()}/${interval}] Alert sent: ${outcome} at ${pct}% (threshold ${threshold}%)`,
+      `[${asset.toUpperCase()}/${interval}] Alert sent: ${outcome} at ${pct}%`,
     );
   }
 }
